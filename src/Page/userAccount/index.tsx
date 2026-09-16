@@ -1,26 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useAuthStore } from "../../store/authStore";
 import MyProfile from "./_components/MyProfile";
 import BookingHistory from "./_components/BookingHistory";
 import Setting from "./_components/Setting";
-import ClinicOwnerPortal from "./ClinicOwnerPortal";
-import { ArrowLeftRight } from "lucide-react";
 
 type Tab = "profile" | "booking" | "setting";
 
 const UserAccount = () => {
-  const user = useAuthStore((state) => state.user);
-  const normalizedRole = user?.role?.toLowerCase() || "";
-  const isClinicOwner =
-    normalizedRole === "clinic_owner" || normalizedRole === "clinic owner";
-
-  // Allow switching view between Patient and Clinic Owner for full testing flexibility
-  const [viewRole, setViewRole] = useState<"PATIENT" | "CLINIC_OWNER">(
-    isClinicOwner ? "CLINIC_OWNER" : "PATIENT"
-  );
-
   const [activeTab, setActiveTab] = useState<Tab>("profile");
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -79,104 +66,71 @@ const UserAccount = () => {
       {/* Google Font */}
       <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');`}</style>
 
-      {/* Role Switcher Toolbar (Testing & Role Simulation) */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-2xl p-3 px-4">
-        <div className="flex items-center gap-2 text-xs text-gray-600">
-          <span className="font-semibold text-gray-800">Account Portal:</span>
-          <span className="bg-white border border-gray-200 px-2.5 py-0.5 rounded-md font-medium text-gray-700">
-            {viewRole === "CLINIC_OWNER" ? "Clinic Owner Mode" : "Patient Mode"}
-          </span>
-          {user?.role && (
-            <span className="text-gray-400">
-              (Logged in as: {user.role})
-            </span>
-          )}
-        </div>
+      {/* Page Title */}
+      <h1
+        style={{
+          color: "#38bdf8",
+          fontWeight: 600,
+          fontSize: "1.5rem",
+          marginBottom: "4px",
+        }}
+      >
+        User Account
+      </h1>
+      <p
+        style={{
+          color: "#6b7280",
+          fontSize: "0.85rem",
+          marginBottom: "24px",
+        }}
+      >
+        Manage your patient profile, treatment bookings, and preferences.
+      </p>
 
-        <button
-          type="button"
-          onClick={() =>
-            setViewRole(viewRole === "CLINIC_OWNER" ? "PATIENT" : "CLINIC_OWNER")
-          }
-          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-white border border-gray-200 hover:border-sky-300 text-sky-600 shadow-2xs hover:bg-sky-50 transition cursor-pointer"
-        >
-          <ArrowLeftRight size={13} />
-          Switch to {viewRole === "CLINIC_OWNER" ? "Patient Account" : "Clinic Owner Portal"}
-        </button>
+      {/* Tab Navigation */}
+      <div
+        style={{
+          display: "flex",
+          gap: "0px",
+          borderBottom: "1px solid #e5e7eb",
+          marginBottom: "24px",
+        }}
+      >
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "10px 20px",
+                fontSize: "0.875rem",
+                fontWeight: isActive ? 500 : 400,
+                color: isActive ? "#38bdf8" : "#6b7280",
+                background: "none",
+                border: "none",
+                borderBottom: isActive
+                  ? "2px solid #38bdf8"
+                  : "2px solid transparent",
+                marginBottom: "-1px",
+                cursor: "pointer",
+                transition: "color 0.2s",
+              }}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Render Portal based on View Role */}
-      {viewRole === "CLINIC_OWNER" ? (
-        <ClinicOwnerPortal />
-      ) : (
-        <div>
-          {/* Patient Account Header */}
-          <h1
-            style={{
-              color: "#38bdf8",
-              fontWeight: 600,
-              fontSize: "1.5rem",
-              marginBottom: "4px",
-            }}
-          >
-            User Account
-          </h1>
-          <p
-            style={{
-              color: "#6b7280",
-              fontSize: "0.85rem",
-              marginBottom: "24px",
-            }}
-          >
-            Manage your account, bookings, and preferences.
-          </p>
-
-          {/* Tab Navigation */}
-          <div
-            style={{
-              display: "flex",
-              gap: "0px",
-              borderBottom: "1px solid #e5e7eb",
-              marginBottom: "24px",
-            }}
-          >
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    padding: "10px 20px",
-                    fontSize: "0.875rem",
-                    fontWeight: isActive ? 500 : 400,
-                    color: isActive ? "#38bdf8" : "#6b7280",
-                    background: "none",
-                    border: "none",
-                    borderBottom: isActive
-                      ? "2px solid #38bdf8"
-                      : "2px solid transparent",
-                    marginBottom: "-1px",
-                    cursor: "pointer",
-                    transition: "color 0.2s",
-                  }}
-                >
-                  {tab.icon}
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Tab Content */}
-          {activeTab === "profile" && <MyProfile />}
-          {activeTab === "booking" && <BookingHistory />}
-          {activeTab === "setting" && <Setting />}
-        </div>
-      )}
+      {/* Tab Content */}
+      {activeTab === "profile" && <MyProfile />}
+      {activeTab === "booking" && <BookingHistory />}
+      {activeTab === "setting" && <Setting />}
     </div>
   );
 };

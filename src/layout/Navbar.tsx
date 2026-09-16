@@ -206,10 +206,14 @@ export default function Navbar() {
       </Link>
     ));
 
+  const isClinicOwner =
+    user?.role?.toLowerCase() === "clinic_owner" ||
+    user?.role?.toLowerCase() === "clinic owner";
+
   const renderAccountLinks = (isMobile = false) => (
     <>
       <Link
-        to="/user-account"
+        to={isClinicOwner ? "/clinic-dashboard" : "/user-account"}
         onClick={isMobile ? closeMenu : () => setUserDropdownOpen(false)}
         className={`flex items-center gap-4 hover:bg-gray-50 rounded-2xl transition-all ${
           isMobile ? "px-6 py-5 mb-3" : "px-5 py-4"
@@ -218,16 +222,20 @@ export default function Navbar() {
         <div
           className={`${
             isMobile ? "w-12 h-12" : "w-11 h-11"
-          } bg-blue-100 rounded-2xl flex items-center justify-center`}
+          } ${isClinicOwner ? "bg-emerald-100" : "bg-blue-100"} rounded-2xl flex items-center justify-center`}
         >
-          <User size={isMobile ? 28 : 24} className="text-blue-600" />
+          {isClinicOwner ? (
+            <Building2 size={isMobile ? 28 : 24} className="text-emerald-600" />
+          ) : (
+            <User size={isMobile ? 28 : 24} className="text-blue-600" />
+          )}
         </div>
         <div className="min-w-0">
           <p className={isMobile ? "font-semibold" : "font-medium"}>
-            User Account
+            {isClinicOwner ? "Clinic Dashboard" : "User Account"}
           </p>
           <p className={isMobile ? "text-sm text-gray-500" : "text-xs text-gray-500"}>
-            View account and bookings
+            {isClinicOwner ? "Manage clinic & bookings" : "View account and bookings"}
           </p>
         </div>
       </Link>

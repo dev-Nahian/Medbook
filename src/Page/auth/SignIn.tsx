@@ -38,16 +38,19 @@ const SignIn: React.FC = () => {
 
   const [errors, setErrors] = useState<Errors>({});
   const [showPassword, setShowPassword] = useState(false);
-
   const signinMutation = useMutation({
     mutationFn: (payload: SigninPayload) => signin(payload),
     onSuccess: (response) => {
+      const role = response.data.user?.role?.toLowerCase();
+      const isOwner = role === "clinic_owner" || role === "clinic owner";
+
       setAuth({
         accessToken: response.data.access,
         refreshToken: response.data.refresh,
         user: response.data.user,
       });
-      navigate("/user-account");
+
+      navigate(isOwner ? "/clinic-dashboard" : "/user-account");
     },
   });
 
@@ -207,15 +210,26 @@ const SignIn: React.FC = () => {
           <span className="font-medium text-gray-700">Sign In With Google</span>
         </button>
 
-        <p className="text-center text-sm text-gray-600 mt-6">
-          Does not have an account?{" "}
-          <Link
-            to="/signup?account_type=PATIENT"
-            className="text-black font-medium hover:underline"
-          >
-            Sign Up
-          </Link>
-        </p>
+        <div className="text-center text-xs text-gray-600 mt-6 space-y-2">
+          <p>
+            Don't have an account?{" "}
+            <Link
+              to="/signup?account_type=PATIENT"
+              className="text-sky-600 font-semibold hover:underline"
+            >
+              Sign Up as Patient
+            </Link>
+          </p>
+          <p className="text-gray-400">
+            Are you a healthcare provider?{" "}
+            <Link
+              to="/list-your-clinic"
+              className="text-emerald-600 font-semibold hover:underline"
+            >
+              List Your Clinic
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

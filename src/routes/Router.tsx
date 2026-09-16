@@ -16,6 +16,7 @@ import ResetPassword from "../Page/auth/ResetPassword";
 import ClinicDetails from "../Page/ClinicDetails";
 import BookingPage from "../Page/clinicBooking";
 import UserAccount from "../Page/userAccount";
+import ClinicDashboard from "../Page/clinicDashboard";
 import ResourcePage from "../Page/resources";
 import { resourceLinks } from "../Page/resources/resourceData";
 import LoadingFallback from "../components/common/LoadingFallback";
@@ -177,6 +178,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<LoadingFallback />}>
             <UserAccount />
+          </Suspense>
+        ),
+      },
+      {
+        path: "/clinic-dashboard",
+        element: (
+          <Suspense fallback={<LoadingFallback />}>
+            <ClinicDashboard />
           </Suspense>
         ),
       },

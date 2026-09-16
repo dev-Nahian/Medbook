@@ -115,21 +115,22 @@ export default function Footer() {
           <div className="lg:col-span-2">
             <h3 className="text-white font-semibold mb-5 text-lg">Quick Links</h3>
             <ul className="space-y-3 text-gray-400 text-[15px]">
-              <li><a href="#" className="hover:text-white transition-colors">Home</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Find Clinics</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
+              <li><Link to="/" className="hover:text-white transition-colors">Home</Link></li>
+              <li><Link to="/see-all-clinic" className="hover:text-white transition-colors">Find Clinics</Link></li>
+              <li><Link to="/list-your-clinic" className="hover:text-white transition-colors">List Your Clinic</Link></li>
+              <li><Link to="/about-us" className="hover:text-white transition-colors">About Us</Link></li>
+              <li><Link to="/contact" className="hover:text-white transition-colors">Contact</Link></li>
             </ul>
           </div>
 
-          {/* Legal */}
+          {/* Legal & Resources */}
           <div className="lg:col-span-2">
-            <h3 className="text-white font-semibold mb-5 text-lg">Legal</h3>
+            <h3 className="text-white font-semibold mb-5 text-lg">Resources</h3>
             <ul className="space-y-3 text-gray-400 text-[15px]">
-              <li><a href="#" className="hover:text-white transition-colors">Privacy Policy</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Terms of Service</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Cookie Policy</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Help & FAQ</a></li>
+              <li><Link to="/blog" className="hover:text-white transition-colors">Health Blog</Link></li>
+              <li><Link to="/book-dialysis-abroad" className="hover:text-white transition-colors">Dialysis Abroad</Link></li>
+              <li><Link to="/travel-insurance" className="hover:text-white transition-colors">Travel Insurance</Link></li>
+              <li><Link to="/faqs" className="hover:text-white transition-colors">Help & FAQ</Link></li>
             </ul>
           </div>
 
@@ -137,11 +138,11 @@ export default function Footer() {
           <div className="lg:col-span-3">
             <h3 className="text-white font-semibold mb-5 text-lg">Contact Information</h3>
             <div className="space-y-4 text-gray-400 text-[15px]">
-              <p>+1 234 567 8900</p>
-              <p>support@demo.com</p>
+              <p>+65 6789 0123</p>
+              <p>support@medbook.health</p>
               <p>
-                221B Central Avenue, San<br />
-                Francisco, CA 94105, USA
+                Novena Medical Hub, 123 Medical Blvd<br />
+                Singapore 308610
               </p>
             </div>
           </div>
@@ -150,7 +151,7 @@ export default function Footer() {
         {/* Bottom Divider */}
         <div className="border-t border-gray-800 mt-16 pt-8">
           <div className="text-center gap-4 text-sm text-gray-500">
-            <p>© 2026 Demo. All rights reserved.</p>
+            <p>© 2026 MedBook Health Network. All rights reserved.</p>
           </div>
         </div>
       </div>
