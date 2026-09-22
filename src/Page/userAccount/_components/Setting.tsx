@@ -2,8 +2,13 @@
 
 import { useState } from "react";
 import { Eye, EyeOff, ChevronDown } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { changePassword, ApiError } from "../../../lib/authApi";
+import { useAuthStore } from "../../../store/authStore";
 
 const Setting = () => {
+  const accessToken = useAuthStore((state) => state.accessToken);
+
   const [language, setLanguage] = useState("English");
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -15,11 +20,63 @@ const Setting = () => {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const languages = ["English", "Spanish", "French", "German", "Arabic", "Bengali"];
 
+  const changePasswordMutation = useMutation({
+    mutationFn: () =>
+      changePassword(
+        {
+          oldPassword: currentPassword,
+          newPassword: newPassword,
+          confirmPassword: confirmPassword,
+        },
+        accessToken!
+      ),
+    onSuccess: () => {
+      setSuccessMessage("Password changed successfully!");
+      setErrorMessage(null);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setSuccessMessage(null), 4000);
+    },
+    onError: (err: unknown) => {
+      setSuccessMessage(null);
+      if (err instanceof ApiError) {
+        setErrorMessage(err.message);
+      } else if (err instanceof Error) {
+        setErrorMessage(err.message);
+      } else {
+        setErrorMessage("Failed to change password. Please check your credentials.");
+      }
+    },
+  });
+
   const handleUpdatePassword = () => {
-    // handle password update logic
-    console.log({ currentPassword, newPassword, confirmPassword });
+    setSuccessMessage(null);
+    setErrorMessage(null);
+
+    if (!currentPassword) {
+      setErrorMessage("Current password is required.");
+      return;
+    }
+    if (!newPassword || newPassword.length < 8) {
+      setErrorMessage("New password must be at least 8 characters long.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setErrorMessage("New password and confirm password do not match.");
+      return;
+    }
+    if (!accessToken) {
+      setErrorMessage("Please sign in to change your password.");
+      return;
+    }
+
+    changePasswordMutation.mutate();
   };
 
   return (
@@ -78,6 +135,18 @@ const Setting = () => {
         Update your password to keep your account secure.
       </p>
 
+      {successMessage && (
+        <div className="mb-5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold max-w-sm">
+          {successMessage}
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="mb-5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold max-w-sm">
+          {errorMessage}
+        </div>
+      )}
+
       {/* Password Fields */}
       <div className="flex flex-col gap-4 w-full max-w-sm">
         {/* Current Password */}
@@ -96,7 +165,7 @@ const Setting = () => {
             <button
               type="button"
               onClick={() => setShowCurrent(!showCurrent)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
             >
               {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -119,7 +188,7 @@ const Setting = () => {
             <button
               type="button"
               onClick={() => setShowNew(!showNew)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
             >
               {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -142,7 +211,7 @@ const Setting = () => {
             <button
               type="button"
               onClick={() => setShowConfirm(!showConfirm)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
             >
               {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -152,13 +221,21 @@ const Setting = () => {
         {/* Update Password Button */}
         <button
           onClick={handleUpdatePassword}
-          className="w-full bg-sky-400 hover:bg-sky-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors mt-1"
+          disabled={changePasswordMutation.isPending}
+          className="w-full bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white text-sm font-medium py-2.5 rounded-lg transition-colors mt-1 cursor-pointer flex items-center justify-center gap-2"
         >
-          Update Password
+          {changePasswordMutation.isPending ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Updating...
+            </>
+          ) : (
+            "Update Password"
+          )}
         </button>
       </div>
     </div>
   );
 };
 
-export default Setting;
+export default Setting;

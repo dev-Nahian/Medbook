@@ -1,14 +1,25 @@
-"use client";
-
 import { useState } from "react";
+import { useAuthStore } from "../../store/authStore";
 import MyProfile from "./_components/MyProfile";
 import BookingHistory from "./_components/BookingHistory";
 import Setting from "./_components/Setting";
+import ClinicOwnerPortal from "./ClinicOwnerPortal";
 
 type Tab = "profile" | "booking" | "setting";
 
 const UserAccount = () => {
   const [activeTab, setActiveTab] = useState<Tab>("profile");
+  const user = useAuthStore((state) => state.user);
+
+  // If the logged-in user is a Clinic Owner, display the Clinic Owner Portal directly
+  if (user?.role === "CLINIC_OWNER") {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mt-32 min-h-screen">
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');`}</style>
+        <ClinicOwnerPortal />
+      </div>
+    );
+  }
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     {

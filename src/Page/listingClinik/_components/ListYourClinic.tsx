@@ -16,9 +16,16 @@ import {
   Clock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { signup, ApiError } from "../../../lib/authApi";
+import {
+  signup,
+  verifySignupOtp,
+  signin,
+  resendOtp,
+  ApiError,
+} from "../../../lib/authApi";
+import { registerClinic, ClinicApiError } from "../../../lib/clinicApi";
 import { useAuthStore } from "../../../store/authStore";
 
 // ─── Country Data ─────────────────────────────────────────────────────────────
@@ -142,9 +149,15 @@ function CountryDropdown({
 }
 
 export default function ListYourClinic() {
-  const navigate = useNavigate();
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const setAuth = useAuthStore((state) => state.setAuth);
+  const user = useAuthStore((state) => state.user);
   const setPendingVerificationEmail = useAuthStore(
     (state) => state.setPendingVerificationEmail
+  );
+  const setPendingFullName = useAuthStore((state) => state.setPendingFullName);
+  const setSubmittedClinicInfo = useAuthStore(
+    (state) => state.setSubmittedClinicInfo
   );
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -153,10 +166,18 @@ export default function ListYourClinic() {
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmittedSuccess, setIsSubmittedSuccess] = useState(false);
 
+  // OTP Modal State
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpValues, setOtpValues] = useState<string[]>(["", "", "", "", "", ""]);
+  const [otpTimeLeft, setOtpTimeLeft] = useState(239);
+  const [otpError, setOtpError] = useState("");
+  const [resendMsg, setResendMsg] = useState<string | null>(null);
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   // Step 1: Owner Credentials
   const [ownerData, setOwnerData] = useState({
-    fullName: "",
-    email: "",
+    fullName: user?.full_name || user?.name || "",
+    email: user?.email || "",
     password: "",
     confirmPassword: "",
     phone: "",
@@ -182,24 +203,298 @@ export default function ListYourClinic() {
     licenseNumber: "",
     accreditationBody: "Ministry of Health (MOH)",
     documentFileName: "",
+    documentFile: null as File | null,
     agreeTerms: true,
     agreeMedicalCompliance: true,
   });
 
-  const signupMutation = useMutation({
-    mutationFn: (payload: any) => signup(payload),
-    onSuccess: (res, vars) => {
-      const email = res.data.email || vars.email;
-      setPendingVerificationEmail(email);
-      // Display the dedicated Under Review & Check Mail confirmation screen
+  // OTP Countdown Timer
+  useEffect(() => {
+    if (!showOtpModal || otpTimeLeft <= 0) return;
+    const timer = window.setInterval(() => {
+      setOtpTimeLeft((prev) => prev - 1);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [showOtpModal, otpTimeLeft]);
+
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  // Step 1: Register User & Trigger Email OTP
+  const signupStep1Mutation = useMutation({
+    mutationFn: async () => {
+      try {
+        return await signup({
+          fullName: ownerData.fullName.trim(),
+          email: ownerData.email.trim(),
+          password: ownerData.password,
+          confirmPassword: ownerData.confirmPassword,
+          termAndCondition: true,
+          privacyPolicy: true,
+          accountType: "CLINIC_OWNER",
+          country: country.name,
+          phone: `${country.dial}${ownerData.phone.trim()}`,
+        });
+      } catch (err) {
+        const msg = err instanceof ApiError || err instanceof Error ? err.message : "";
+        if (
+          msg.toLowerCase().includes("already exists") ||
+          msg.toLowerCase().includes("already registered")
+        ) {
+          // Account already exists: attempt to sign in with provided password
+          try {
+            const signinRes = await signin({
+              email: ownerData.email.trim(),
+              password: ownerData.password,
+            });
+            if (signinRes?.data?.access) {
+              setAuth({
+                accessToken: signinRes.data.access,
+                refreshToken: signinRes.data.refresh,
+                user: {
+                  ...signinRes.data.user,
+                  full_name: ownerData.fullName.trim() || signinRes.data.user.full_name,
+                },
+              });
+              setStep(2);
+              return null;
+            }
+          } catch {
+            // If sign in fails (e.g. unverified), fall back to OTP verification
+          }
+        }
+        throw err;
+      }
+    },
+    onSuccess: (res) => {
+      if (res === null) return; // Auto signed in and advanced to Step 2
+      setPendingVerificationEmail(ownerData.email.trim());
+      setPendingFullName(ownerData.fullName.trim());
+      setOtpValues(["", "", "", "", "", ""]);
+      setOtpTimeLeft(239);
+      setOtpError("");
+      setShowOtpModal(true);
+      setTimeout(() => otpInputRefs.current[0]?.focus(), 100);
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof ApiError || err instanceof Error ? err.message : "";
+      if (
+        msg.toLowerCase().includes("already exists") ||
+        msg.toLowerCase().includes("already registered")
+      ) {
+        setPendingVerificationEmail(ownerData.email.trim());
+        setPendingFullName(ownerData.fullName.trim());
+        setOtpValues(["", "", "", "", "", ""]);
+        setOtpTimeLeft(239);
+        setOtpError("Account exists. Please enter the OTP code to verify ownership.");
+        setShowOtpModal(true);
+        resendOtp({ email: ownerData.email.trim(), purpose: "signup" }).catch(() => {});
+      } else {
+        setErrorMsg(msg || "Failed to initiate clinic owner verification. Please try again.");
+      }
+    },
+  });
+
+  // Verify OTP & Sign In to obtain Bearer Token
+  const verifyOtpMutation = useMutation({
+    mutationFn: async () => {
+      const code = otpValues.join("");
+      try {
+        await verifySignupOtp({
+          email: ownerData.email.trim(),
+          otp: code,
+          purpose: "signup",
+        });
+      } catch (err) {
+        const msg = err instanceof ApiError || err instanceof Error ? err.message : "";
+        // If backend says OTP is already verified / vrified, proceed to sign in directly
+        if (
+          msg.toLowerCase().includes("already vrified") ||
+          msg.toLowerCase().includes("already verified")
+        ) {
+          // Proceed to sign in below
+        } else {
+          throw err;
+        }
+      }
+
+      // Automatically sign in with credentials to obtain Bearer token
+      const signinRes = await signin({
+        email: ownerData.email.trim(),
+        password: ownerData.password,
+      });
+
+      return signinRes;
+    },
+    onSuccess: (signinRes) => {
+      if (signinRes?.data) {
+        setAuth({
+          accessToken: signinRes.data.access,
+          refreshToken: signinRes.data.refresh,
+          user: {
+            ...signinRes.data.user,
+            full_name: ownerData.fullName.trim() || signinRes.data.user.full_name,
+          },
+        });
+      }
+      setShowOtpModal(false);
+      setStep(2); // Seamlessly advance to Step 2!
+    },
+    onError: (err: unknown) => {
+      if (err instanceof ApiError || err instanceof Error) {
+        setOtpError(err.message);
+      } else {
+        setOtpError("Invalid verification code. Please check your email and try again.");
+      }
+    },
+  });
+
+  // Resend OTP
+  const resendOtpMutation = useMutation({
+    mutationFn: () => resendOtp({ email: ownerData.email.trim(), purpose: "signup" }),
+    onSuccess: (res) => {
+      setOtpTimeLeft(239);
+      setOtpValues(["", "", "", "", "", ""]);
+      setResendMsg(res?.data?.message || "Verification code resent successfully.");
+      setOtpError("");
+      setTimeout(() => setResendMsg(null), 4000);
+      otpInputRefs.current[0]?.focus();
+    },
+    onError: (err: unknown) => {
+      if (err instanceof ApiError || err instanceof Error) {
+        setOtpError(err.message);
+      } else {
+        setOtpError("Failed to resend code. Please try again in a few moments.");
+      }
+    },
+  });
+
+  // Step 3: Final Clinic Submission with Bearer Token
+  const registerClinicMutation = useMutation({
+    mutationFn: async () => {
+      const infectiousTags: string[] = [];
+      if (clinicData.isolationHIV) infectiousTags.push("HIV");
+      if (clinicData.isolationHBV) infectiousTags.push("HBV");
+      if (clinicData.isolationHCV) infectiousTags.push("HCV");
+
+      return await registerClinic(
+        {
+          clinic_name: clinicData.clinicName.trim(),
+          contact_person: ownerData.fullName.trim(),
+          email: ownerData.email.trim(),
+          phone_number: `${country.dial}${ownerData.phone.trim()}`,
+          password: ownerData.password,
+          confirm_password: ownerData.confirmPassword,
+          join_network: true,
+          privacy_and_terms_accepted: licenseData.agreeTerms,
+          public_activation: true,
+          compliance_confirmed: licenseData.agreeMedicalCompliance,
+          accepted_infectious: infectiousTags.join(", ") || "None",
+          total_beds: clinicData.bedCount || "1",
+          facility_license_number: licenseData.licenseNumber.trim(),
+          accreditation_authority: licenseData.accreditationBody.trim(),
+          medical_license_document: licenseData.documentFile,
+        },
+        accessToken // Valid Bearer token!
+      );
+    },
+    onSuccess: () => {
+      setPendingVerificationEmail(ownerData.email.trim());
+      setPendingFullName(ownerData.fullName.trim());
+
+      const acceptedInfectious: string[] = [];
+      if (clinicData.isolationHIV) acceptedInfectious.push("HIV");
+      if (clinicData.isolationHBV) acceptedInfectious.push("HBV");
+      if (clinicData.isolationHCV) acceptedInfectious.push("HCV");
+
+      setSubmittedClinicInfo({
+        clinicName: clinicData.clinicName.trim(),
+        title: `${clinicData.clinicName.trim()} - International Dialysis Center`,
+        description: `Certified dialysis medical facility located at ${clinicData.address.trim()}, ${clinicData.city.trim()}, providing high-standard renal treatments with ${clinicData.bedCount || "12"} stations.`,
+        country: country.name,
+        city: clinicData.city.trim(),
+        address: clinicData.address.trim(),
+        bedCount: clinicData.bedCount || "12",
+        dialysisCost: "280",
+        currency: "USD",
+        dialysisType: clinicData.treatmentHDF ? "Hemodialysis (HD) & Online HDF" : "Hemodialysis (HD)",
+        facilities: [
+          "Multilingual Staff",
+          "Free High-Speed Wi-Fi",
+          "Private Treatment Rooms",
+          "Personal Entertainment TV",
+          "24/7 On-Call Nephrologist",
+          "Wheelchair Accessible",
+        ],
+        acceptedPatients: acceptedInfectious,
+        acceptedInsurances: [
+          "European Health Insurance Card (EHIC)",
+          "Global Health Insurance Card (GHIC)",
+          "Bupa Global",
+          "Cigna Global",
+        ],
+        paymentOptions: ["Credit / Debit Card", "Cash on Arrival", "Direct Bank Transfer"],
+        availableShifts: ["morning", "afternoon", "evening"],
+        operatingDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+        licenseNumber: licenseData.licenseNumber.trim(),
+        accreditationBody: licenseData.accreditationBody.trim(),
+        contactEmail: ownerData.email.trim(),
+        contactPhone: `${country.dial}${ownerData.phone.trim()}`,
+        ownerName: ownerData.fullName.trim(),
+      });
       setIsSubmittedSuccess(true);
     },
     onError: (err: unknown) => {
-      if (err instanceof ApiError) setErrorMsg(err.message);
-      else if (err instanceof Error) setErrorMsg(err.message);
-      else setErrorMsg("Clinic registration failed. Please try again.");
+      if (err instanceof ClinicApiError || err instanceof ApiError || err instanceof Error) {
+        setErrorMsg(err.message);
+      } else {
+        setErrorMsg("Clinic registration failed. Please try again.");
+      }
     },
   });
+
+  const handleOtpDigitChange = (index: number, val: string) => {
+    const cleanVal = val.replace(/\D/g, "");
+    if (!cleanVal) {
+      const next = [...otpValues];
+      next[index] = "";
+      setOtpValues(next);
+      return;
+    }
+
+    if (cleanVal.length > 1) {
+      // Pasted full OTP code
+      const digits = cleanVal.slice(0, 6).split("");
+      const next = [...otpValues];
+      digits.forEach((d, i) => {
+        if (i < 6) next[i] = d;
+      });
+      setOtpValues(next);
+      const focusIndex = Math.min(digits.length, 5);
+      otpInputRefs.current[focusIndex]?.focus();
+      return;
+    }
+
+    const next = [...otpValues];
+    next[index] = cleanVal;
+    setOtpValues(next);
+    setOtpError("");
+
+    if (index < 5 && cleanVal) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !otpValues[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    } else if (e.key === "Enter" && otpValues.join("").length === 6) {
+      verifyOtpMutation.mutate();
+    }
+  };
 
   const validateStep1 = () => {
     setErrorMsg("");
@@ -211,11 +506,11 @@ export default function ListYourClinic() {
       setErrorMsg("Please enter a valid work email address.");
       return false;
     }
-    if (!ownerData.password || ownerData.password.length < 8) {
+    if (!accessToken && (!ownerData.password || ownerData.password.length < 8)) {
       setErrorMsg("Password must be at least 8 characters long.");
       return false;
     }
-    if (ownerData.password !== ownerData.confirmPassword) {
+    if (!accessToken && ownerData.password !== ownerData.confirmPassword) {
       setErrorMsg("Passwords do not match.");
       return false;
     }
@@ -253,26 +548,25 @@ export default function ListYourClinic() {
   };
 
   const handleNext = () => {
-    if (step === 1 && validateStep1()) setStep(2);
-    else if (step === 2 && validateStep2()) setStep(3);
+    if (step === 1) {
+      if (!validateStep1()) return;
+      // If already logged in, proceed directly to Step 2
+      if (accessToken) {
+        setStep(2);
+      } else {
+        // Trigger signup & send OTP to work email
+        signupStep1Mutation.mutate();
+      }
+    } else if (step === 2) {
+      if (validateStep2()) setStep(3);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateStep3()) return;
 
-    setPendingVerificationEmail(ownerData.email.trim());
-    setIsSubmittedSuccess(true);
-
-    signupMutation.mutate({
-      fullName: ownerData.fullName.trim(),
-      email: ownerData.email.trim(),
-      password: ownerData.password,
-      confirmPassword: ownerData.confirmPassword,
-      termAndCondition: licenseData.agreeTerms,
-      privacyPolicy: licenseData.agreeMedicalCompliance,
-      accountType: "CLINIC_OWNER",
-    });
+    registerClinicMutation.mutate();
   };
 
   // ─── POST-SUBMISSION UNDER REVIEW & CHECK MAIL CONFIRMATION VIEW ───
@@ -300,7 +594,7 @@ export default function ListYourClinic() {
             <p className="text-sm sm:text-base text-gray-600 max-w-lg mx-auto leading-relaxed">
               Your clinic registration and medical documents are currently under review by our Medical Compliance Team.
               <strong className="text-gray-900 block mt-1">
-                For further assessment, review updates, and email verification, please check your mail.
+                You will receive email notifications and status updates regarding your application.
               </strong>
             </p>
           </div>
@@ -333,23 +627,21 @@ export default function ListYourClinic() {
               <Sparkles size={14} className="text-sky-600" /> What happens next?
             </p>
             <ol className="list-decimal list-inside space-y-1 text-sky-800 text-[11px] leading-relaxed">
-              <li>Open your inbox and verify your email address using the confirmation code.</li>
               <li>Our medical administration team audits your facility license and serology safety protocols.</li>
-              <li>Once approved by Super Admin, your clinic will go live on the MedBook search marketplace!</li>
+              <li>You can monitor your application review status anytime inside your Clinic Owner Portal.</li>
+              <li>Once approved by Super Admin, you will receive a confirmation email to log in to your Clinic Portal and go live for patient bookings!</li>
             </ol>
           </div>
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <button
-              onClick={() =>
-                navigate(`/varification?email=${encodeURIComponent(ownerData.email)}&type=clinic`)
-              }
-              className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-semibold text-xs shadow-md shadow-sky-500/20 transition flex items-center justify-center gap-2 cursor-pointer"
+            <Link
+              to="/clinic-dashboard"
+              className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-semibold text-xs shadow-md shadow-sky-500/20 transition flex items-center justify-center gap-2 cursor-pointer text-center"
             >
-              <Mail size={15} />
-              Verify Email OTP Now
-            </button>
+              <Building2 size={15} />
+              Go to Clinic Dashboard
+            </Link>
             <Link
               to="/"
               className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs transition text-center"
@@ -808,6 +1100,7 @@ export default function ListYourClinic() {
                             setLicenseData({
                               ...licenseData,
                               documentFileName: file.name,
+                              documentFile: file,
                             });
                           }
                         }}
@@ -873,17 +1166,24 @@ export default function ListYourClinic() {
                 <button
                   type="button"
                   onClick={handleNext}
-                  className="flex items-center gap-1.5 px-6 py-2.5 text-xs font-semibold text-white bg-sky-500 hover:bg-sky-600 rounded-xl shadow-xs transition cursor-pointer"
+                  disabled={step === 1 && signupStep1Mutation.isPending}
+                  className="flex items-center gap-1.5 px-6 py-2.5 text-xs font-semibold text-white bg-sky-500 hover:bg-sky-600 rounded-xl shadow-xs transition cursor-pointer disabled:opacity-60"
                 >
-                  Continue <ArrowRight size={14} />
+                  {step === 1 && signupStep1Mutation.isPending ? (
+                    "Sending Code..."
+                  ) : (
+                    <>
+                      Continue <ArrowRight size={14} />
+                    </>
+                  )}
                 </button>
               ) : (
                 <button
                   type="submit"
-                  disabled={signupMutation.isPending}
+                  disabled={registerClinicMutation.isPending}
                   className="flex items-center gap-2 px-6 py-2.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50"
                 >
-                  {signupMutation.isPending ? "Submitting Application..." : "Submit Clinic for Verification"}
+                  {registerClinicMutation.isPending ? "Submitting Application..." : "Submit Clinic for Verification"}
                   <Check size={15} />
                 </button>
               )}
@@ -898,6 +1198,97 @@ export default function ListYourClinic() {
           </div>
         </div>
       </div>
+
+      {/* ── INLINE EMAIL OTP VERIFICATION MODAL ── */}
+      <AnimatePresence>
+        {showOtpModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-gray-100 space-y-5"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center mx-auto">
+                  <Mail size={26} />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900">Verify Clinic Work Email</h3>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  We sent a 6-digit confirmation code to{" "}
+                  <strong className="text-gray-800 font-semibold">{ownerData.email}</strong>.
+                  Enter it below to verify your clinic owner account.
+                </p>
+              </div>
+
+              {otpError && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium text-center">
+                  {otpError}
+                </div>
+              )}
+
+              {resendMsg && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium text-center">
+                  {resendMsg}
+                </div>
+              )}
+
+              {/* 6-digit OTP Inputs */}
+              <div className="flex items-center justify-center gap-2 sm:gap-2.5">
+                {otpValues.map((digit, idx) => (
+                  <input
+                    key={idx}
+                    ref={(el) => {
+                      otpInputRefs.current[idx] = el;
+                    }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpDigitChange(idx, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                    className="w-11 h-12 text-center text-lg font-bold text-gray-900 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-100 outline-none transition"
+                  />
+                ))}
+              </div>
+
+              {/* Resend & Countdown */}
+              <div className="flex items-center justify-between text-xs pt-1">
+                <span className="text-gray-400">
+                  Expires in: <strong className="text-gray-700 font-mono">{formatTime(otpTimeLeft)}</strong>
+                </span>
+                <button
+                  type="button"
+                  disabled={otpTimeLeft > 0 || resendOtpMutation.isPending}
+                  onClick={() => resendOtpMutation.mutate()}
+                  className="font-semibold text-sky-600 hover:text-sky-700 disabled:text-gray-400 disabled:cursor-not-allowed transition cursor-pointer"
+                >
+                  {resendOtpMutation.isPending ? "Resending..." : "Resend Code"}
+                </button>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowOtpModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={verifyOtpMutation.isPending || otpValues.join("").length < 6}
+                  onClick={() => verifyOtpMutation.mutate()}
+                  className="flex-1 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  {verifyOtpMutation.isPending ? "Verifying..." : "Verify & Continue"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }

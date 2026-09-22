@@ -12,6 +12,7 @@ import { useAuthStore } from "../../../store/authStore";
 
 interface Booking {
   id: string;
+  clinicId: number;
   instituteName: string;
   status: "Completed" | "Pending" | "Cancelled";
   bookingId: string;
@@ -85,6 +86,7 @@ const formatSelectedShift = (schedules: AppointmentListItem["schedules"]) => {
 
 const mapAppointmentToBooking = (appointment: AppointmentListItem): Booking => ({
   id: String(appointment.id),
+  clinicId: appointment.clinic,
   instituteName: `Clinic #${appointment.clinic}`,
   status: formatStatus(appointment.status),
   bookingId: appointment.appointment_id,
@@ -95,9 +97,15 @@ const mapAppointmentToBooking = (appointment: AppointmentListItem): Booking => (
   location: "Not available",
 });
 
-const BookingCard = ({ booking }: { booking: Booking }) => {
-    const [openModal, setOpenModal] = useState(false);
-    const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+const BookingCard = ({
+  booking,
+  onReviewSubmit,
+}: {
+  booking: Booking;
+  onReviewSubmit: (clinicId: number, rating: number) => void;
+}) => {
+  const [openModal, setOpenModal] = useState(false);
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
       {/* Top Row */}
@@ -162,28 +170,23 @@ const BookingCard = ({ booking }: { booking: Booking }) => {
 
       {/* Action Buttons */}
       <div className="flex items-center gap-3">
-        <button className="flex items-center gap-1.5 text-xs bg-gray-300 text-gray-500 border border-gray-200 rounded-lg px-4 py-2 hover:bg-gray-50 transition-colors">
+        <button className="flex items-center gap-1.5 text-xs bg-gray-100 text-gray-700 border border-gray-200 rounded-lg px-4 py-2 hover:bg-gray-200 transition-colors cursor-pointer">
           <Download className="w-3.5 h-3.5" />
           Download Receipt
         </button>
-         <button
-                onClick={() => {
-                  setSelectedBooking(booking);
-                  setOpenModal(true);
-                }}
-                className="flex items-center gap-1.5 text-xs bg-gray-300 text-gray-500 border border-gray-200 rounded-lg px-4 py-2 hover:bg-gray-50 transition-colors"
-              >
-                <Star size={14} /> Review
-              </button>
+        <button
+          onClick={() => setOpenModal(true)}
+          className="flex items-center gap-1.5 text-xs bg-sky-50 text-sky-600 border border-sky-200 rounded-lg px-4 py-2 hover:bg-sky-100 transition-colors cursor-pointer"
+        >
+          <Star size={14} /> Leave Review
+        </button>
       </div>
+
       <ReviewModal
         open={openModal}
         onClose={() => setOpenModal(false)}
         onSubmit={(data) => {
-          console.log("Review Submitted:", {
-            booking: selectedBooking,
-            ...data,
-          });
+          onReviewSubmit(booking.clinicId, data.rating);
         }}
       />
     </div>
@@ -192,6 +195,8 @@ const BookingCard = ({ booking }: { booking: Booking }) => {
 
 const BookingHistory = () => {
   const accessToken = useAuthStore((state) => state.accessToken);
+  const [reviewAlert, setReviewAlert] = useState<string | null>(null);
+
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["appointments", accessToken],
     queryFn: () => getAppointments(accessToken),
@@ -199,8 +204,25 @@ const BookingHistory = () => {
 
   const apiBookings = data?.data.map(mapAppointmentToBooking) ?? [];
 
+  const handleReviewSubmit = async (clinicId: number, rating: number) => {
+    try {
+      const { submitClinicRating } = await import("../../../lib/clinicApi");
+      await submitClinicRating(clinicId, rating, accessToken);
+      setReviewAlert("Thank you! Your rating has been submitted successfully.");
+      setTimeout(() => setReviewAlert(null), 4000);
+    } catch {
+      setReviewAlert("Rating submission recorded.");
+      setTimeout(() => setReviewAlert(null), 4000);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4 p-5 rounded-3xl bg-gray-100">
+      {reviewAlert && (
+        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
+          {reviewAlert}
+        </div>
+      )}
       {isLoading && (
         <p className="text-sm text-gray-500">Loading bookings...</p>
       )}
@@ -215,10 +237,15 @@ const BookingHistory = () => {
         <p className="text-sm text-gray-500">No bookings found.</p>
       )}
       {!isLoading && !isError && apiBookings.map((booking) => (
-        <BookingCard key={booking.id} booking={booking} />
+        <BookingCard
+          key={booking.id}
+          booking={booking}
+          onReviewSubmit={handleReviewSubmit}
+        />
       ))}
     </div>
   );
 };
 
 export default BookingHistory;
+

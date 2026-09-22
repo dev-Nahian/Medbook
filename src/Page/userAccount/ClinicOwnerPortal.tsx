@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Building2,
@@ -14,8 +14,6 @@ import {
   CheckCircle2,
   FileCheck2,
   Globe,
-  Sparkles,
-  RefreshCw,
   Mail,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -161,17 +159,47 @@ export default function ClinicOwnerPortal() {
   const [activeTab, setActiveTab] = useState<ClinicTab>("overview");
   const accessToken = useAuthStore((state) => state.accessToken);
   const user = useAuthStore((state) => state.user);
+  const submittedClinicInfo = useAuthStore((state) => state.submittedClinicInfo);
 
   // Approval Lifecycle: "PENDING_APPROVAL" vs "APPROVED"
   const [approvalStatus, setApprovalStatus] = useState<"PENDING_APPROVAL" | "APPROVED">(
     "PENDING_APPROVAL"
   );
 
+  // Check real submission status from API if token exists
+  const { data: submissionData } = useQuery({
+    queryKey: ["clinic-submission-status", accessToken],
+    queryFn: async () => {
+      const { getClinicSubmissionStatus, getClinicRegistration } = await import("../../lib/clinicApi");
+      try {
+        const res = await getClinicSubmissionStatus(accessToken);
+        if (res?.data) return res;
+      } catch {
+        // Fallback to getClinicRegistration (/clinics/register/)
+      }
+      return getClinicRegistration(accessToken);
+    },
+    enabled: Boolean(accessToken),
+  });
+
+  useEffect(() => {
+    if (submissionData?.data) {
+      const data = submissionData.data as any;
+      if (
+        data.is_approved ||
+        data.status?.toLowerCase() === "approved" ||
+        data.status?.toLowerCase() === "active"
+      ) {
+        setApprovalStatus("APPROVED");
+      }
+    }
+  }, [submissionData]);
+
   // Fetch appointments from API
-  const { data: apiAppointmentData } = useQuery({
+  const { data: apiAppointmentData, refetch: refetchAppointments } = useQuery({
     queryKey: ["clinic-owner-appointments", accessToken],
     queryFn: () => getAppointments(accessToken),
-    enabled: Boolean(accessToken) && approvalStatus === "APPROVED",
+    enabled: Boolean(accessToken),
   });
 
   const [localAppointments, setLocalAppointments] = useState<AppointmentListItem[]>(
@@ -186,18 +214,37 @@ export default function ClinicOwnerPortal() {
       ? apiAppointmentData.data
       : localAppointments;
 
-  const handleUpdateStatus = (
+  const handleUpdateStatus = async (
     id: number,
     status: "Confirmed" | "Cancelled" | "Completed"
   ) => {
+    // Optimistically update local state
     setLocalAppointments((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status } : item))
     );
+
+    // Call real API if accessToken exists
+    if (accessToken) {
+      try {
+        const { updateAppointmentStatus } = await import("../../lib/clinicApi");
+        const apiStatus =
+          status === "Confirmed"
+            ? "confirmed"
+            : status === "Cancelled"
+            ? "cancelled"
+            : "confirmed";
+        await updateAppointmentStatus(id, apiStatus as any, accessToken);
+        refetchAppointments();
+      } catch (err) {
+        console.error("Failed to update appointment status on server:", err);
+      }
+    }
   };
 
   const tabs: { id: ClinicTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     {
       id: "overview",
+
       label: "Dashboard",
       icon: <LayoutDashboard size={17} />,
     },
@@ -230,42 +277,35 @@ export default function ClinicOwnerPortal() {
     },
   ];
 
+  const subData = submissionData?.data as any;
+
+  const displayClinicName =
+    subData?.clinic_name ||
+    subData?.name ||
+    submittedClinicInfo?.clinicName ||
+    user?.full_name ||
+    "Submitted Medical Facility";
+
+  const displayLocation =
+    subData?.address ||
+    subData?.location ||
+    subData?.city ||
+    [submittedClinicInfo?.address, submittedClinicInfo?.city].filter(Boolean).join(", ") ||
+    "Registered Facility Address";
+
+  const displayBeds =
+    subData?.total_beds ||
+    submittedClinicInfo?.bedCount ||
+    "12";
+
+  const displayEmail =
+    user?.email ||
+    subData?.email ||
+    submittedClinicInfo?.contactEmail ||
+    "owner@clinic.com";
+
   return (
     <div className="space-y-8">
-      {/* Super Admin Approval Simulator Bar (Testing Support) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3 px-4 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950 text-white shadow-sm">
-        <div className="flex items-center gap-2 text-xs">
-          <Sparkles size={14} className="text-amber-400" />
-          <span className="font-semibold text-gray-200">Super Admin Review Status:</span>
-          <span
-            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-              approvalStatus === "APPROVED"
-                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-            }`}
-          >
-            {approvalStatus === "APPROVED"
-              ? "🟢 Approved & Live on Marketplace"
-              : "🟡 Under Compliance Review"}
-          </span>
-        </div>
-
-        <button
-          type="button"
-          onClick={() =>
-            setApprovalStatus(
-              approvalStatus === "APPROVED" ? "PENDING_APPROVAL" : "APPROVED"
-            )
-          }
-          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 transition cursor-pointer"
-        >
-          <RefreshCw size={12} />
-          {approvalStatus === "APPROVED"
-            ? "Simulate Under-Review State"
-            : "Simulate Super Admin Approval"}
-        </button>
-      </div>
-
       {/* ── STATE 1: CLINIC UNDER COMPLIANCE REVIEW ── */}
       {approvalStatus === "PENDING_APPROVAL" ? (
         <div className="space-y-8">
@@ -279,7 +319,7 @@ export default function ClinicOwnerPortal() {
                     Application Submitted • Review in Progress
                   </span>
                   <span className="text-xs text-gray-400">
-                    {user?.email || "owner@novenadialysis.com"}
+                    {displayEmail}
                   </span>
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 tracking-tight">
@@ -299,6 +339,21 @@ export default function ClinicOwnerPortal() {
                 <span className="text-lg font-bold text-amber-900 block mt-0.5">
                   24 – 48 Hours
                 </span>
+              </div>
+            </div>
+
+            {/* Approval Notification Box */}
+            <div className="flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-sky-50/60 to-emerald-50/50 border border-indigo-100/90 text-indigo-950">
+              <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+                <Mail size={18} />
+              </div>
+              <div className="space-y-1 text-xs sm:text-sm">
+                <h4 className="font-bold text-indigo-950 flex items-center gap-1.5">
+                  What happens once approved?
+                </h4>
+                <p className="text-indigo-900/90 leading-relaxed">
+                  Once your application is approved by Super Admin, you will receive a confirmation email. From that email, you can log in to your <strong>Clinic Portal</strong> to manage your medical facility profile, dialysis shift schedules, and patient appointments.
+                </p>
               </div>
             </div>
 
@@ -387,16 +442,16 @@ export default function ClinicOwnerPortal() {
                 <div>
                   <span className="text-gray-400 block text-[11px]">Clinic Name</span>
                   <span className="font-semibold text-gray-900">
-                    Al Rahman Advanced Kidney Care Centre
+                    {displayClinicName}
                   </span>
                 </div>
                 <div>
                   <span className="text-gray-400 block text-[11px]">Location</span>
-                  <span className="font-medium">123 Medical Blvd, Novena, Singapore</span>
+                  <span className="font-medium">{displayLocation}</span>
                 </div>
                 <div>
                   <span className="text-gray-400 block text-[11px]">Dialysis Stations</span>
-                  <span className="font-medium">12 Hemodialysis & HDF Beds</span>
+                  <span className="font-medium">{displayBeds} Hemodialysis & HDF Beds</span>
                 </div>
               </div>
             </div>
@@ -432,10 +487,10 @@ export default function ClinicOwnerPortal() {
                 </span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
-                Clinic Partner Portal
+                {displayClinicName}
               </h1>
               <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                Manage your dialysis center listing, shift schedules, and approve patient medical travel bookings.
+                Manage your certified dialysis center listing, shift capacities, and approve international patient travel bookings.
               </p>
             </div>
           </div>

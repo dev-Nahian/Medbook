@@ -1,6 +1,9 @@
 import {
   apiGet,
   apiPostForm,
+  apiPostJson,
+  apiPatchForm,
+  apiPutForm,
   ApiClientError,
   type ApiEnvelope,
 } from "./apiClient";
@@ -389,3 +392,327 @@ export const createAppointment = async (
     throw error;
   }
 };
+
+export const getAppointmentDetails = async (
+  appointmentId: string | number,
+  accessToken?: string | null
+) => {
+  try {
+    return await apiGet<ApiEnvelope<AppointmentListItem>>(`/appointments/${appointmentId}/`, {
+      accessToken,
+    });
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const updateAppointmentStatus = async (
+  appointmentId: string | number,
+  status: "confirmed" | "cancelled" | "pending",
+  accessToken?: string | null
+) => {
+  const formData = new FormData();
+  formData.append("status", status);
+
+  try {
+    return await apiPatchForm<ApiEnvelope<AppointmentListItem>>(
+      `/appointments/${appointmentId}/`,
+      formData,
+      { accessToken }
+    );
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const getBookingHistory = async (accessToken?: string | null) => {
+  try {
+    return await apiGet<AppointmentListResponse>("/booking-history/", { accessToken });
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const getClinicSubmissionStatus = async (accessToken?: string | null) => {
+  try {
+    return await apiGet<ApiEnvelope<{ status: string; is_approved?: boolean; message?: string }>>(
+      "/clinics/submission-status/",
+      { accessToken }
+    );
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const getClinicDashboard = async (
+  clinicId?: string | number,
+  accessToken?: string | null
+) => {
+  try {
+    return await apiGet<ApiEnvelope<any>>(
+      clinicId ? `/clinics/dashboard/?clinic_id=${clinicId}` : "/clinics/dashboard/",
+      { accessToken }
+    );
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const getClinicDashboardAppointments = async (accessToken?: string | null) => {
+  try {
+    return await apiGet<AppointmentListResponse>("/clinics/dashboard/appointments/", {
+      accessToken,
+    });
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const submitClinicRating = async (
+  clinicId: string | number,
+  rating: number,
+  accessToken?: string | null
+) => {
+  const formData = new FormData();
+  formData.append("clinic", String(clinicId));
+  formData.append("rating", String(rating));
+
+  try {
+    return await apiPostForm<ApiEnvelope<any>>("/clinics/rating/", formData, { accessToken });
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const updateClinicProfile = async (
+  profileData: Record<string, any>,
+  accessToken?: string | null
+) => {
+  try {
+    return await apiPostJson<ApiEnvelope<ClinicDetailsItem>>(
+      "/clinics/profile/",
+      profileData,
+      { accessToken }
+    );
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const updateClinicMediaAndAvailability = async (
+  images?: File[],
+  availabilities?: { date: string }[],
+  accessToken?: string | null
+) => {
+  const formData = new FormData();
+  if (images && images.length > 0) {
+    images.forEach((img) => formData.append("images", img, img.name));
+  }
+  if (availabilities) {
+    formData.append("availabilities", JSON.stringify(availabilities));
+  }
+
+  try {
+    return await apiPatchForm<ApiEnvelope<ClinicDetailsItem>>(
+      "/clinics/profile/",
+      formData,
+      { accessToken }
+    );
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const checkoutAppointment = async (
+  payload: {
+    appointment_id: string | number;
+    success_url: string;
+    cancel_url: string;
+    price_id?: string;
+  },
+  accessToken?: string | null
+) => {
+  const formData = new FormData();
+  formData.append("appointment_id", String(payload.appointment_id));
+  formData.append("success_url", payload.success_url);
+  formData.append("cancel_url", payload.cancel_url);
+  if (payload.price_id) formData.append("price_id", payload.price_id);
+
+  try {
+    return await apiPostForm<ApiEnvelope<{ url?: string; session_id?: string }>>(
+      "/checkout/appointment/",
+      formData,
+      { accessToken }
+    );
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const getClinicStats = async () => {
+  try {
+    return await apiGet<ApiEnvelope<any>>("/clinic/stats/");
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export type ClinicRegisterPayload = {
+  clinic_name: string;
+  contact_person: string;
+  email: string;
+  phone_number: string;
+  password?: string;
+  confirm_password?: string;
+  join_network?: boolean;
+  privacy_and_terms_accepted?: boolean;
+  public_activation?: boolean;
+  compliance_confirmed?: boolean;
+  accepted_infectious?: string;
+  total_beds?: string | number;
+  facility_license_number?: string;
+  accreditation_authority?: string;
+  medical_license_document?: File | null;
+};
+
+export type ClinicRegisterResponse = {
+  id?: number;
+  clinic_name?: string;
+  contact_person?: string;
+  email?: string;
+  phone_number?: string;
+  status?: string;
+  [key: string]: any;
+};
+
+export const registerClinic = async (
+  payload: ClinicRegisterPayload,
+  accessToken?: string | null
+) => {
+  const formData = new FormData();
+  formData.append("clinic_name", payload.clinic_name);
+  formData.append("contact_person", payload.contact_person);
+  formData.append("email", payload.email);
+  formData.append("phone_number", payload.phone_number);
+
+  if (payload.password) formData.append("password", payload.password);
+  if (payload.confirm_password) formData.append("confirm_password", payload.confirm_password);
+
+  formData.append("join_network", payload.join_network ? "True" : "False");
+  formData.append(
+    "privacy_and_terms_accepted",
+    payload.privacy_and_terms_accepted ? "True" : "False"
+  );
+  formData.append("public_activation", payload.public_activation ? "true" : "false");
+  formData.append("compliance_confirmed", payload.compliance_confirmed ? "true" : "false");
+
+  if (payload.accepted_infectious) {
+    formData.append("accepted_infectious", payload.accepted_infectious);
+  }
+  if (payload.total_beds !== undefined && payload.total_beds !== null) {
+    formData.append("total_beds", String(payload.total_beds));
+  }
+  if (payload.facility_license_number) {
+    formData.append("facility_license_number", payload.facility_license_number);
+  }
+  if (payload.accreditation_authority) {
+    formData.append("accreditation_authority", payload.accreditation_authority);
+  }
+  if (payload.medical_license_document) {
+    formData.append("medical_license_document", payload.medical_license_document);
+  }
+
+  try {
+    return await apiPostForm<ApiEnvelope<ClinicRegisterResponse>>(
+      "/clinics/register/",
+      formData,
+      { accessToken }
+    );
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const updateClinicRegistrationDocuments = async (
+  payload: {
+    facility_license_number?: string;
+    accreditation_authority?: string;
+    medical_license_document?: File | null;
+  },
+  accessToken?: string | null
+) => {
+  const formData = new FormData();
+  if (payload.facility_license_number) {
+    formData.append("facility_license_number", payload.facility_license_number);
+  }
+  if (payload.accreditation_authority) {
+    formData.append("accreditation_authority", payload.accreditation_authority);
+  }
+  if (payload.medical_license_document) {
+    formData.append("medical_license_document", payload.medical_license_document);
+  }
+
+  try {
+    return await apiPutForm<ApiEnvelope<ClinicRegisterResponse>>(
+      "/clinics/register/",
+      formData,
+      { accessToken }
+    );
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+export const getClinicRegistration = async (accessToken?: string | null) => {
+  try {
+    return await apiGet<ApiEnvelope<ClinicRegisterResponse>>("/clinics/register/", {
+      accessToken,
+    });
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new ClinicApiError(error.message, error.status);
+    }
+    throw error;
+  }
+};
+
+

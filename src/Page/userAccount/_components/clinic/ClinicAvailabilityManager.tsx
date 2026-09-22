@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { useAuthStore } from "../../../../store/authStore";
+
 interface BlockedDate {
   id: string;
   date: string;
@@ -20,24 +22,33 @@ interface BlockedDate {
 }
 
 export default function ClinicAvailabilityManager() {
+  const submittedClinicInfo = useAuthStore((state) => state.submittedClinicInfo);
+
+  const bedNum = Number.parseInt(submittedClinicInfo?.bedCount || "12", 10) || 12;
+  const shiftCap = Math.max(2, Math.floor(bedNum / 2));
+
+  const hasMorning = submittedClinicInfo?.availableShifts ? submittedClinicInfo.availableShifts.includes("morning") : true;
+  const hasAfternoon = submittedClinicInfo?.availableShifts ? submittedClinicInfo.availableShifts.includes("afternoon") : true;
+  const hasEvening = submittedClinicInfo?.availableShifts ? submittedClinicInfo.availableShifts.includes("evening") : true;
+
   const [shifts, setShifts] = useState({
     morning: {
-      enabled: true,
+      enabled: hasMorning,
       startTime: "08:00",
       endTime: "12:00",
-      capacity: 6,
+      capacity: shiftCap,
     },
     afternoon: {
-      enabled: true,
+      enabled: hasAfternoon,
       startTime: "13:00",
       endTime: "17:00",
-      capacity: 6,
+      capacity: shiftCap,
     },
     evening: {
-      enabled: true,
+      enabled: hasEvening,
       startTime: "18:00",
       endTime: "22:00",
-      capacity: 4,
+      capacity: Math.max(2, bedNum - shiftCap),
     },
   });
 
@@ -50,6 +61,19 @@ export default function ClinicAvailabilityManager() {
     Saturday: true,
     Sunday: false,
   });
+
+  React.useEffect(() => {
+    if (submittedClinicInfo?.bedCount) {
+      const bCount = Number.parseInt(submittedClinicInfo.bedCount, 10) || 12;
+      const sCap = Math.max(2, Math.floor(bCount / 2));
+      setShifts((prev) => ({
+        ...prev,
+        morning: { ...prev.morning, capacity: sCap },
+        afternoon: { ...prev.afternoon, capacity: sCap },
+        evening: { ...prev.evening, capacity: Math.max(2, bCount - sCap) },
+      }));
+    }
+  }, [submittedClinicInfo]);
 
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([
     {

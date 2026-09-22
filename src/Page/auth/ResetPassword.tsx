@@ -1,6 +1,10 @@
 
-import { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { useState } from "react";
+import { Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { resetPassword, ApiError } from "../../lib/authApi";
+import { useAuthStore } from "../../store/authStore";
 
 interface FormData {
   newPassword: string;
@@ -13,33 +17,63 @@ interface Errors {
 }
 
 const ResetPassword: React.FC = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const pendingVerificationEmail = useAuthStore(
+    (state) => state.pendingVerificationEmail
+  );
+
+  const email = searchParams.get("email") || pendingVerificationEmail || "";
+
   const [formData, setFormData] = useState<FormData>({
-    newPassword: '',
-    confirmPassword: '',
+    newPassword: "",
+    confirmPassword: "",
   });
 
   const [errors, setErrors] = useState<Errors>({});
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+
+  const resetMutation = useMutation({
+    mutationFn: (payload: { newPassword: string; confirmPassword: string }) =>
+      resetPassword({
+        email,
+        newPassword: payload.newPassword,
+        confirmPassword: payload.confirmPassword,
+        purpose: "password_reset",
+      }),
+    onSuccess: () => {
+      setIsSuccess(true);
+      setTimeout(() => {
+        navigate("/signin");
+      }, 3000);
+    },
+    onError: (err: unknown) => {
+      if (err instanceof ApiError) {
+        setApiError(err.message);
+      } else if (err instanceof Error) {
+        setApiError(err.message);
+      } else {
+        setApiError("Failed to reset password. Please try again.");
+      }
+    },
+  });
 
   const validateForm = (): boolean => {
     const newErrors: Errors = {};
 
-    // New Password validation
     if (!formData.newPassword) {
-      newErrors.newPassword = 'New password is required';
+      newErrors.newPassword = "New password is required";
     } else if (formData.newPassword.length < 8) {
-      newErrors.newPassword = 'Password must be at least 8 characters long';
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.newPassword)) {
-      newErrors.newPassword = 'Password must contain at least one uppercase letter, one lowercase letter, and one number';
+      newErrors.newPassword = "Password must be at least 8 characters long";
     }
 
-    // Confirm Password validation
     if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your new password';
+      newErrors.confirmPassword = "Please confirm your new password";
     } else if (formData.confirmPassword !== formData.newPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = "Passwords do not match";
     }
 
     setErrors(newErrors);
@@ -48,28 +82,48 @@ const ResetPassword: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setApiError(null);
 
     if (!validateForm()) return;
 
-    setIsLoading(true);
-
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    alert('Password reset successfully! ');
-    // Here you would redirect to login page or dashboard
-    setIsLoading(false);
+    resetMutation.mutate({
+      newPassword: formData.newPassword,
+      confirmPassword: formData.confirmPassword,
+    });
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
 
-    // Clear error when user starts typing
     if (errors[name as keyof Errors]) {
       setErrors((prev) => ({ ...prev, [name]: undefined }));
     }
   };
+
+  if (isSuccess) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-8 text-center space-y-5">
+          <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+            <CheckCircle2 size={36} />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900">
+            Password Reset Successful!
+          </h2>
+          <p className="text-sm text-gray-600">
+            Your password has been reset securely. Redirecting you to Sign In...
+          </p>
+          <Link
+            to="/signin"
+            className="inline-block px-6 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold"
+          >
+            Sign In Now
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
@@ -83,7 +137,18 @@ const ResetPassword: React.FC = () => {
             One more step to get your account back, let&apos;s<br />
             reset your password!
           </p>
+          {email && (
+            <span className="inline-block mt-2 text-xs font-medium text-sky-600 bg-sky-50 px-3 py-1 rounded-full">
+              {email}
+            </span>
+          )}
         </div>
+
+        {apiError && (
+          <div className="mb-5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs text-center font-medium">
+            {apiError}
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -94,19 +159,19 @@ const ResetPassword: React.FC = () => {
             </label>
             <div className="relative">
               <input
-                type={showNewPassword ? 'text' : 'password'}
+                type={showNewPassword ? "text" : "password"}
                 name="newPassword"
                 value={formData.newPassword}
                 onChange={handleChange}
                 placeholder="Enter your new password"
                 className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all pr-12 ${
-                  errors.newPassword ? 'border-red-500' : 'border-gray-300'
+                  errors.newPassword ? "border-red-500" : "border-gray-300"
                 }`}
               />
               <button
                 type="button"
                 onClick={() => setShowNewPassword(!showNewPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 cursor-pointer"
               >
                 {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
@@ -123,19 +188,19 @@ const ResetPassword: React.FC = () => {
             </label>
             <div className="relative">
               <input
-                type={showConfirmPassword ? 'text' : 'password'}
+                type={showConfirmPassword ? "text" : "password"}
                 name="confirmPassword"
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 placeholder="Confirm your new password"
                 className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all pr-12 ${
-                  errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
+                  errors.confirmPassword ? "border-red-500" : "border-gray-300"
                 }`}
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 cursor-pointer"
               >
                 {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
@@ -148,18 +213,18 @@ const ResetPassword: React.FC = () => {
           {/* Reset Password Button */}
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={resetMutation.isPending}
             className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 
                        text-white font-semibold py-3.5 rounded-2xl transition-all 
-                       text-base mt-4"
+                       text-base mt-4 cursor-pointer"
           >
-            {isLoading ? (
+            {resetMutation.isPending ? (
               <div className="flex items-center justify-center">
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                 Resetting...
               </div>
             ) : (
-              'Reset Password'
+              "Reset Password"
             )}
           </button>
         </form>
@@ -168,4 +233,4 @@ const ResetPassword: React.FC = () => {
   );
 };
 
-export default ResetPassword;
+export default ResetPassword;

@@ -420,15 +420,21 @@ export default function ClinicDetail({ clinic }: { clinic?: ClinicDetailsItem })
     clinic?.address ||
     [clinic?.city, clinic?.country].filter(Boolean).join(", ") ||
     defaultAddress;
-  const acceptedPatients = clinic
-    ? clinic.accepted_patients.map(getAcceptedPatientName).filter(Boolean)
-    : defaultAcceptedPatients;
-  const facilities = clinic
-    ? clinic.facilities.map(getFacilityName).filter(Boolean)
-    : defaultFacilities;
-  const paymentMethods = clinic
-    ? clinic.payment_methods.map(getPaymentMethodName).filter(Boolean)
-    : defaultPaymentMethods;
+
+  const rawAccepted =
+    clinic?.accepted_patients?.map(getAcceptedPatientName).filter(Boolean) ?? [];
+  const acceptedPatients =
+    rawAccepted.length > 0 ? rawAccepted : defaultAcceptedPatients;
+
+  const rawFacilities =
+    clinic?.facilities?.map(getFacilityName).filter(Boolean) ?? [];
+  const facilities =
+    rawFacilities.length > 0 ? rawFacilities : defaultFacilities;
+
+  const rawPaymentMethods =
+    clinic?.payment_methods?.map(getPaymentMethodName).filter(Boolean) ?? [];
+  const paymentMethods =
+    rawPaymentMethods.length > 0 ? rawPaymentMethods : defaultPaymentMethods;
 
   return (
     <div className="min-h-screen bg-white">

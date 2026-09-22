@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { ApiError, verifySignupOtp } from "../../lib/authApi";
+import { ApiError, verifySignupOtp, resendOtp } from "../../lib/authApi";
 import { useAuthStore } from "../../store/authStore";
 import { CheckCircle2, Clock, Mail } from "lucide-react";
 import { motion } from "framer-motion";
@@ -15,8 +15,13 @@ const getErrorMessage = (error: unknown) => {
 };
 
 const OTPVerification: React.FC = () => {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const queryEmail = searchParams.get("email");
+  const purpose = (searchParams.get("purpose") || "signup") as "signup" | "password_reset";
+  const accountType = (searchParams.get("account_type") || "PATIENT").toUpperCase();
+
+  const isClinicOwner = accountType === "CLINIC_OWNER";
 
   const pendingVerificationEmail = useAuthStore(
     (state) => state.pendingVerificationEmail
@@ -35,6 +40,7 @@ const OTPVerification: React.FC = () => {
   const [otpError, setOtpError] = useState("");
   const [timeLeft, setTimeLeft] = useState(239);
   const [isVerifiedSuccess, setIsVerifiedSuccess] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState<string | null>(null);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -51,10 +57,31 @@ const OTPVerification: React.FC = () => {
   }, [timeLeft]);
 
   const verifyMutation = useMutation({
-    mutationFn: verifySignupOtp,
+    mutationFn: (payload: { email: string; otp: string }) =>
+      verifySignupOtp({ ...payload, purpose }),
     onSuccess: () => {
-      setPendingVerificationEmail(null);
-      setIsVerifiedSuccess(true);
+      if (purpose === "password_reset") {
+        navigate(`/reset-password?email=${encodeURIComponent(email.trim())}`);
+      } else {
+        setPendingVerificationEmail(null);
+        setIsVerifiedSuccess(true);
+      }
+    },
+    onError: (err: unknown) => {
+      setOtpError(getErrorMessage(err));
+    },
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: () => resendOtp({ email: email.trim(), purpose }),
+    onSuccess: (data) => {
+      setTimeLeft(239);
+      setOtp(Array.from({ length: OTP_LENGTH }, () => ""));
+      setResendSuccess(data?.message || "Verification code resent successfully.");
+      setTimeout(() => setResendSuccess(null), 4000);
+    },
+    onError: (err: unknown) => {
+      setOtpError(getErrorMessage(err));
     },
   });
 
@@ -107,9 +134,8 @@ const OTPVerification: React.FC = () => {
   };
 
   const handleResend = () => {
-    if (!isResendDisabled) {
-      setTimeLeft(239);
-      setOtp(Array.from({ length: OTP_LENGTH }, () => ""));
+    if (timeLeft <= 0 && email.trim()) {
+      resendMutation.mutate();
     }
   };
 
@@ -128,16 +154,20 @@ const OTPVerification: React.FC = () => {
       return;
     }
 
-    setEmailError("");
+    if (code.length < OTP_LENGTH) {
+      setOtpError(`Please enter the complete ${OTP_LENGTH}-digit code`);
+      return;
+    }
 
-    setIsVerifiedSuccess(true);
+    setEmailError("");
+    setOtpError("");
     verifyMutation.mutate({ email: trimmedEmail, otp: code });
   };
 
-  const isLoading = verifyMutation.isPending;
-  const isResendDisabled = timeLeft > 0;
+  const isLoading = verifyMutation.isPending || resendMutation.isPending;
+  const isResendDisabled = timeLeft > 0 || resendMutation.isPending;
 
-  // ─── POST-VERIFICATION SUCCESS & UNDER REVIEW SCREEN ───
+  // ─── POST-VERIFICATION SUCCESS SCREEN (ROLE-AWARE) ───
   if (isVerifiedSuccess) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-sky-50/50 via-white to-gray-100 flex items-center justify-center p-4 mt-16">
@@ -150,52 +180,86 @@ const OTPVerification: React.FC = () => {
             <CheckCircle2 size={38} className="stroke-[2.5]" />
           </div>
 
-          <div className="space-y-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold uppercase tracking-wider">
-              <Clock size={13} /> Under Compliance Review
-            </span>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-              Your Request Has Been Submitted!
-            </h1>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              Your email has been verified. Your clinic request is currently under review for further assessment by our medical administration team.
-              <strong className="text-gray-900 block mt-2">
-                For further updates and assessment details, please check your mail.
-              </strong>
-            </p>
-          </div>
+          {isClinicOwner ? (
+            /* Clinic Owner Verification Screen */
+            <>
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold uppercase tracking-wider">
+                  <Clock size={13} /> Under Compliance Review
+                </span>
+                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+                  Your Clinic Application Has Been Submitted!
+                </h1>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Your email has been verified. Your clinic registration is currently under review for further assessment by our medical administration team.
+                  <strong className="text-gray-900 block mt-2">
+                    For further updates and assessment details, please check your mail.
+                  </strong>
+                </p>
+              </div>
 
-          <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200 text-left text-xs space-y-2 text-gray-700">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-500">Verified Email:</span>
-              <span className="font-semibold text-sky-600 flex items-center gap-1">
-                <Mail size={12} /> {email}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-500">Review Turnaround:</span>
-              <span className="font-bold text-amber-700">24 – 48 Hours</span>
-            </div>
-          </div>
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200 text-left text-xs space-y-2 text-gray-700">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Verified Email:</span>
+                  <span className="font-semibold text-sky-600 flex items-center gap-1">
+                    <Mail size={12} /> {email}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Review Turnaround:</span>
+                  <span className="font-bold text-amber-700">24 – 48 Hours</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* Patient Account Verification Screen */
+            <>
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider">
+                  <CheckCircle2 size={13} /> Verification Complete
+                </span>
+                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+                  Account Verified Successfully!
+                </h1>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Welcome to MedBook! Your patient account is now fully verified and activated. You can now browse verified dialysis centers, book treatments abroad, and manage your medical travel profile.
+                </p>
+              </div>
+
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200 text-left text-xs space-y-2 text-gray-700">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Verified Email:</span>
+                  <span className="font-semibold text-sky-600 flex items-center gap-1">
+                    <Mail size={12} /> {email}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Account Type:</span>
+                  <span className="font-bold text-emerald-700">Patient Member</span>
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
             <Link
               to="/signin"
               className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-semibold text-xs shadow-xs transition text-center"
             >
-              Sign In to Account
+              Sign In to Your Account
             </Link>
             <Link
               to="/"
               className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs transition text-center"
             >
-              Return Home
+              Return to Home
             </Link>
           </div>
         </motion.div>
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 mt-20">
@@ -208,6 +272,12 @@ const OTPVerification: React.FC = () => {
             Enter the 6-digit OTP sent to your email to verify your MedBook account.
           </p>
         </div>
+
+        {resendSuccess && (
+          <div className="mb-5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold text-center">
+            {resendSuccess}
+          </div>
+        )}
 
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-1">

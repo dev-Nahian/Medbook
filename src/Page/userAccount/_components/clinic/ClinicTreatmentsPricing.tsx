@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { useAuthStore } from "../../../../store/authStore";
+
 interface TreatmentItem {
   id: string;
   name: string;
@@ -22,13 +24,22 @@ interface TreatmentItem {
 }
 
 export default function ClinicTreatmentsPricing() {
+  const submittedClinicInfo = useAuthStore((state) => state.submittedClinicInfo);
+
+  const regCost = submittedClinicInfo?.dialysisCost || "280";
+  const regCurrency = submittedClinicInfo?.currency || "USD";
+  const hasHDF = submittedClinicInfo?.dialysisType ? submittedClinicInfo.dialysisType.includes("HDF") : true;
+  const isHIV = submittedClinicInfo?.acceptedPatients ? submittedClinicInfo.acceptedPatients.includes("HIV") : true;
+  const isHBV = submittedClinicInfo?.acceptedPatients ? submittedClinicInfo.acceptedPatients.includes("HBV") : true;
+  const isHCV = submittedClinicInfo?.acceptedPatients ? submittedClinicInfo.acceptedPatients.includes("HCV") : true;
+
   const [treatments, setTreatments] = useState<TreatmentItem[]>([
     {
       id: "1",
       name: "Standard Hemodialysis (HD)",
       code: "HD",
-      price: "280",
-      currency: "USD",
+      price: regCost,
+      currency: regCurrency,
       duration: "4 Hours",
       description: "High-flux biocompatible dialyzer with ultrapure dialysate water filtration.",
       active: true,
@@ -37,18 +48,18 @@ export default function ClinicTreatmentsPricing() {
       id: "2",
       name: "Online Hemodiafiltration (HDF)",
       code: "HDF",
-      price: "340",
-      currency: "USD",
+      price: (Number.parseInt(regCost) + 60).toString(),
+      currency: regCurrency,
       duration: "4.5 Hours",
       description: "Advanced convective clearance for superior middle-molecule toxin elimination.",
-      active: true,
+      active: hasHDF,
     },
     {
       id: "3",
       name: "Single-Needle Dialysis",
       code: "SN-HD",
-      price: "310",
-      currency: "USD",
+      price: (Number.parseInt(regCost) + 30).toString(),
+      currency: regCurrency,
       duration: "4 Hours",
       description: "Specialized vascular access care for temporary or sensitive fistula access.",
       active: false,
@@ -56,12 +67,32 @@ export default function ClinicTreatmentsPricing() {
   ]);
 
   const [acceptedPatients, setAcceptedPatients] = useState({
-    hiv: true,
-    hbv: true,
-    hcv: true,
+    hiv: isHIV,
+    hbv: isHBV,
+    hcv: isHCV,
     pediatric: false,
     wheelchair: true,
   });
+
+  React.useEffect(() => {
+    if (submittedClinicInfo) {
+      const cost = submittedClinicInfo.dialysisCost || "280";
+      const curr = submittedClinicInfo.currency || "USD";
+      setTreatments((prev) =>
+        prev.map((t) =>
+          t.id === "1" ? { ...t, price: cost, currency: curr } : t
+        )
+      );
+      if (submittedClinicInfo.acceptedPatients) {
+        setAcceptedPatients((prev) => ({
+          ...prev,
+          hiv: submittedClinicInfo.acceptedPatients?.includes("HIV") ?? prev.hiv,
+          hbv: submittedClinicInfo.acceptedPatients?.includes("HBV") ?? prev.hbv,
+          hcv: submittedClinicInfo.acceptedPatients?.includes("HCV") ?? prev.hcv,
+        }));
+      }
+    }
+  }, [submittedClinicInfo]);
 
   const [isSaved, setIsSaved] = useState(false);
 

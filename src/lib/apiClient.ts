@@ -155,3 +155,140 @@ export const apiPostJson = async <T>(
 
   return body as T;
 };
+
+export const apiPutForm = async <T>(
+  path: string,
+  formData: FormData,
+  options?: { accessToken?: string | null }
+): Promise<T> => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PUT",
+    headers: options?.accessToken
+      ? { Authorization: `Bearer ${options.accessToken}` }
+      : undefined,
+    body: formData,
+  });
+
+  const body = await parseJson<T & ApiErrorBody>(response);
+
+  if (!response.ok || (body && typeof body === "object" && "success" in body && body.success === false)) {
+    throw new ApiClientError(extractErrorMessage(body), response.status, body ?? undefined);
+  }
+
+  if (!body) {
+    throw new ApiClientError("Empty response received.", response.status);
+  }
+
+  return body as T;
+};
+
+export const apiPutJson = async <T>(
+  path: string,
+  data: unknown,
+  options?: { accessToken?: string | null }
+): Promise<T> => {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (options?.accessToken) {
+    headers.Authorization = `Bearer ${options.accessToken}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(data),
+  });
+
+  const body = await parseJson<T & ApiErrorBody>(response);
+
+  if (!response.ok || (body && typeof body === "object" && "success" in body && body.success === false)) {
+    throw new ApiClientError(extractErrorMessage(body), response.status, body ?? undefined);
+  }
+
+  if (!body) {
+    throw new ApiClientError("Empty response received.", response.status);
+  }
+
+  return body as T;
+};
+
+export const apiPatchForm = async <T>(
+  path: string,
+  formData: FormData,
+  options?: { accessToken?: string | null }
+): Promise<T> => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PATCH",
+    headers: options?.accessToken
+      ? { Authorization: `Bearer ${options.accessToken}` }
+      : undefined,
+    body: formData,
+  });
+
+  const body = await parseJson<T & ApiErrorBody>(response);
+
+  if (!response.ok || (body && typeof body === "object" && "success" in body && body.success === false)) {
+    throw new ApiClientError(extractErrorMessage(body), response.status, body ?? undefined);
+  }
+
+  if (!body) {
+    throw new ApiClientError("Empty response received.", response.status);
+  }
+
+  return body as T;
+};
+
+export const apiPatchJson = async <T>(
+  path: string,
+  data: unknown,
+  options?: { accessToken?: string | null }
+): Promise<T> => {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (options?.accessToken) {
+    headers.Authorization = `Bearer ${options.accessToken}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(data),
+  });
+
+  const body = await parseJson<T & ApiErrorBody>(response);
+
+  if (!response.ok || (body && typeof body === "object" && "success" in body && body.success === false)) {
+    throw new ApiClientError(extractErrorMessage(body), response.status, body ?? undefined);
+  }
+
+  if (!body) {
+    throw new ApiClientError("Empty response received.", response.status);
+  }
+
+  return body as T;
+};
+
+export const apiDelete = async <T>(
+  path: string,
+  options?: { accessToken?: string | null }
+): Promise<T> => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "DELETE",
+    headers: options?.accessToken
+      ? { Authorization: `Bearer ${options.accessToken}` }
+      : undefined,
+  });
+
+  const body = await parseJson<T & ApiErrorBody>(response);
+
+  if (!response.ok || (body && typeof body === "object" && "success" in body && body.success === false)) {
+    throw new ApiClientError(extractErrorMessage(body), response.status, body ?? undefined);
+  }
+
+  return (body ?? {}) as T;
+};
+

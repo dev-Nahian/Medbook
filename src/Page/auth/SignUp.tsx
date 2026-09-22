@@ -45,6 +45,7 @@ const SignUp: React.FC = () => {
   const setPendingVerificationEmail = useAuthStore(
     (state) => state.setPendingVerificationEmail
   );
+  const setPendingFullName = useAuthStore((state) => state.setPendingFullName);
 
   const accountType = getAccountTypeFromQuery(searchParams.get("account_type"));
   const [formData, setFormData] = useState<FormData>({
@@ -65,7 +66,10 @@ const SignUp: React.FC = () => {
     onSuccess: (response, variables) => {
       const email = response.data.email || variables.email;
       setPendingVerificationEmail(email);
-      navigate(`/varification?email=${encodeURIComponent(email)}`);
+      setPendingFullName(variables.fullName);
+      navigate(
+        `/verification?email=${encodeURIComponent(email)}&account_type=${accountType}`
+      );
     },
   });
 

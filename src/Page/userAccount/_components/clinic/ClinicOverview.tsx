@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import type { AppointmentListItem } from "../../../../lib/clinicApi";
 
+import { useAuthStore } from "../../../../store/authStore";
+
 interface ClinicOverviewProps {
   appointments: AppointmentListItem[];
   onSelectTab: (tab: any) => void;
@@ -20,6 +22,16 @@ export default function ClinicOverview({
   onSelectTab,
   onViewAppointment,
 }: ClinicOverviewProps) {
+  const user = useAuthStore((state) => state.user);
+  const submittedClinicInfo = useAuthStore((state) => state.submittedClinicInfo);
+
+  const displayClinicName =
+    submittedClinicInfo?.clinicName ||
+    user?.full_name ||
+    "Your Dialysis Clinic";
+
+  const totalBeds = submittedClinicInfo?.bedCount || "12";
+
   const pendingCount = appointments.filter(
     (a) => !a.status || a.status.toLowerCase() === "pending"
   ).length;
@@ -36,14 +48,14 @@ export default function ClinicOverview({
   const stats = [
     {
       title: "Total Bookings",
-      value: appointments.length || 12,
+      value: appointments.length || 0,
       subtitle: `${totalSessions} treatment sessions requested`,
       icon: <CalendarCheck className="text-sky-600" size={22} />,
       bg: "bg-sky-50 border-sky-100",
     },
     {
       title: "Pending Approvals",
-      value: pendingCount || 3,
+      value: pendingCount,
       subtitle: "Action required",
       icon: <AlertCircle className="text-amber-600" size={22} />,
       bg: "bg-amber-50 border-amber-100",
@@ -51,15 +63,15 @@ export default function ClinicOverview({
     },
     {
       title: "Confirmed Patients",
-      value: confirmedCount || 8,
+      value: confirmedCount,
       subtitle: "Ready for treatment",
       icon: <CheckCircle2 className="text-emerald-600" size={22} />,
       bg: "bg-emerald-50 border-emerald-100",
     },
     {
       title: "Active Stations",
-      value: "14 / 16",
-      subtitle: "87.5% capacity utilized",
+      value: `${totalBeds} Stations`,
+      subtitle: `${totalBeds} Dialysis & HDF Beds`,
       icon: <TrendingUp className="text-purple-600" size={22} />,
       bg: "bg-purple-50 border-purple-100",
     },
@@ -73,14 +85,14 @@ export default function ClinicOverview({
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-xl">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-xs text-xs font-semibold tracking-wide uppercase">
-              <Building2 size={13} /> Clinic Operations Center
+              <Building2 size={13} /> {displayClinicName}
             </span>
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Welcome to your Clinic Portal
+              Welcome to {displayClinicName}
             </h2>
             <p className="text-white/80 text-sm leading-relaxed">
               Manage international patient bookings, review patient medical reports,
-              and customize treatment shift capacities in one unified dashboard.
+              and customize treatment shift capacities for your facility.
             </p>
           </div>
 
