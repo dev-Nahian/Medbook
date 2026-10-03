@@ -18,7 +18,15 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { getAppointments, type AppointmentListItem } from "../../lib/clinicApi";
+import { useMemo } from "react";
+import {
+  getAppointments,
+  getClinicSubmissionStatus,
+  getClinicRegistration,
+  getClinicDashboard,
+  updateAppointmentStatus,
+  type AppointmentListItem,
+} from "../../lib/clinicApi";
 import { useAuthStore } from "../../store/authStore";
 
 import ClinicOverview from "./_components/clinic/ClinicOverview";
@@ -170,30 +178,65 @@ export default function ClinicOwnerPortal() {
   const { data: submissionData } = useQuery({
     queryKey: ["clinic-submission-status", accessToken],
     queryFn: async () => {
-      const { getClinicSubmissionStatus, getClinicRegistration } = await import("../../lib/clinicApi");
       try {
         const res = await getClinicSubmissionStatus(accessToken);
         if (res?.data) return res;
       } catch {
-        // Fallback to getClinicRegistration (/clinics/register/)
+        // Fallback
       }
-      return getClinicRegistration(accessToken);
+      try {
+        const reg = await getClinicRegistration(accessToken);
+        if (reg?.data) return reg;
+      } catch {
+        // Fallback
+      }
+      try {
+        const dash = await getClinicDashboard(undefined, accessToken);
+        if (dash?.data) return dash;
+      } catch {
+        // Fallback
+      }
+      return null;
     },
     enabled: Boolean(accessToken),
   });
 
   useEffect(() => {
-    if (submissionData?.data) {
-      const data = submissionData.data as any;
-      if (
-        data.is_approved ||
-        data.status?.toLowerCase() === "approved" ||
-        data.status?.toLowerCase() === "active"
-      ) {
+    if (submissionData) {
+      const raw = submissionData as any;
+      const data = (raw && typeof raw === "object" && "data" in raw ? raw.data : raw) || {};
+      const subStatus = (data && typeof data === "object" && data.submission_status) || {};
+      const clinicObj = (data && typeof data === "object" && (data.clinic || data.registration || data.data)) || {};
+
+      const checkStr = (val: unknown, expected: string) =>
+        typeof val === "string" && val.toLowerCase() === expected.toLowerCase();
+
+      const isApproved =
+        data.is_approved === true ||
+        data.approved === true ||
+        data.is_active === true ||
+        checkStr(data.status, "approved") ||
+        checkStr(data.status, "active") ||
+        checkStr(data.clinic_status, "approved") ||
+        subStatus.is_approved === true ||
+        subStatus.approved === true ||
+        subStatus.is_active === true ||
+        checkStr(subStatus.status, "approved") ||
+        checkStr(subStatus.status, "active") ||
+        checkStr(subStatus.status_badge, "APPLICATION APPROVED") ||
+        clinicObj.is_approved === true ||
+        clinicObj.is_active === true ||
+        checkStr(clinicObj.status, "approved") ||
+        checkStr(clinicObj.status, "active") ||
+        (user as any)?.is_approved === true ||
+        checkStr((user as any)?.clinic_status, "approved") ||
+        checkStr((user as any)?.status, "approved");
+
+      if (isApproved) {
         setApprovalStatus("APPROVED");
       }
     }
-  }, [submissionData]);
+  }, [submissionData, user]);
 
   // Fetch appointments from API
   const { data: apiAppointmentData, refetch: refetchAppointments } = useQuery({
@@ -209,10 +252,18 @@ export default function ClinicOwnerPortal() {
   const [selectedAppointment, setSelectedAppointment] =
     useState<AppointmentListItem | null>(null);
 
-  const appointments =
-    apiAppointmentData?.data && apiAppointmentData.data.length > 0
-      ? apiAppointmentData.data
-      : localAppointments;
+  const appointments: AppointmentListItem[] = useMemo(() => {
+    if (Array.isArray(apiAppointmentData?.data) && apiAppointmentData.data.length > 0) {
+      return apiAppointmentData.data;
+    }
+    if (Array.isArray(apiAppointmentData) && apiAppointmentData.length > 0) {
+      return apiAppointmentData;
+    }
+    if (Array.isArray((apiAppointmentData as any)?.appointments) && (apiAppointmentData as any).appointments.length > 0) {
+      return (apiAppointmentData as any).appointments;
+    }
+    return localAppointments;
+  }, [apiAppointmentData, localAppointments]);
 
   const handleUpdateStatus = async (
     id: number,
@@ -226,7 +277,6 @@ export default function ClinicOwnerPortal() {
     // Call real API if accessToken exists
     if (accessToken) {
       try {
-        const { updateAppointmentStatus } = await import("../../lib/clinicApi");
         const apiStatus =
           status === "Confirmed"
             ? "confirmed"
@@ -278,8 +328,10 @@ export default function ClinicOwnerPortal() {
   ];
 
   const subData = submissionData?.data as any;
+  const subStatusObj = subData?.submission_status || subData || {};
 
   const displayClinicName =
+    subStatusObj?.submitted_clinic ||
     subData?.clinic_name ||
     subData?.name ||
     submittedClinicInfo?.clinicName ||
@@ -299,6 +351,7 @@ export default function ClinicOwnerPortal() {
     "12";
 
   const displayEmail =
+    subStatusObj?.contact_email ||
     user?.email ||
     subData?.email ||
     submittedClinicInfo?.contactEmail ||

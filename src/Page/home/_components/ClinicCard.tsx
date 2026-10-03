@@ -1,4 +1,29 @@
-const clinics = [
+import { useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { getClinics, type ClinicListItem } from "../../../lib/clinicApi";
+
+type Treatment = {
+  name: string;
+  price: string;
+};
+
+type Clinic = {
+  id: number;
+  name: string;
+  image: string;
+  rating: number;
+  location: string;
+  distance: string;
+  badges: string[];
+  amenities: string[];
+  treatments: Treatment[];
+};
+
+const fallbackImage =
+  "https://images.unsplash.com/photo-1587351021355-a479a299d2f9?w=600&q=80";
+
+const defaultClinics: Clinic[] = [
   {
     id: 1,
     name: "City Medical Center",
@@ -43,9 +68,66 @@ const clinics = [
   },
 ];
 
+const normalizeTreatmentName = (rawName: string): string => {
+  const lower = rawName.toLowerCase().trim();
+  if (lower === "hdf" || lower.includes("hdf") || lower.includes("hemodiafiltration")) {
+    return "Dialysis HDF";
+  }
+  if (lower === "hd" || lower.includes("hd") || lower.includes("hemodialysis") || lower.includes("dialysis")) {
+    return "Dialysis HD";
+  }
+  return rawName || "Dialysis HD";
+};
+
+const getTreatmentName = (treatment: ClinicListItem["treatments"][number]) => {
+  const raw = treatment.name ?? treatment.treatment_name ?? treatment.title ?? "Treatment";
+  return normalizeTreatmentName(raw);
+};
+
+const getTreatmentPrice = (treatment: ClinicListItem["treatments"][number]) => {
+  const rawPrice = treatment.price ?? treatment.amount ?? "";
+  if (!rawPrice) return "";
+  const trimmed = String(rawPrice).trim();
+  return /^\d/.test(trimmed) ? `$${trimmed}` : trimmed;
+};
+
+const getFacilityName = (facility: ClinicListItem["facilities"][number]) =>
+  facility.name ?? facility.facility_name ?? facility.title ?? "";
+
+const getRating = (clinic: ClinicListItem) => {
+  const rating =
+    clinic.average_rating ?? Number.parseFloat(clinic.ratings[0]?.rating ?? "0");
+
+  return Number.isFinite(rating) ? rating : 0;
+};
+
+const mapClinic = (clinic: ClinicListItem): Clinic => ({
+  id: clinic.id,
+  name: clinic.name,
+  image: clinic.images?.[0]?.image_url ?? clinic.images?.[0]?.image ?? fallbackImage,
+  rating: getRating(clinic),
+  location: [clinic.city, clinic.country].filter(Boolean).join(", ") || "Singapore",
+  distance: clinic.distance_from_city_center || "0.69 km from the city center",
+  badges: clinic.insurances && clinic.insurances.length > 0
+    ? clinic.insurances.map((insurance) => insurance.insurance_name)
+    : ["EHIC", "GHIC"],
+  amenities: clinic.facilities && clinic.facilities.length > 0
+    ? clinic.facilities.map(getFacilityName).filter(Boolean)
+    : ["Refreshments", "Free Transfer", "Free Parking"],
+  treatments: clinic.treatments && clinic.treatments.length > 0
+    ? clinic.treatments.map((treatment) => ({
+        name: getTreatmentName(treatment),
+        price: getTreatmentPrice(treatment),
+      }))
+    : [
+        { name: "Dialysis HD", price: "$250" },
+        { name: "Dialysis HDF", price: "$250" },
+      ],
+});
+
 function StarRating({ rating }: { rating: number }) {
   return (
-    <div className="flex  bg-amber-100/50 p-1.5 rounded-lg items-center gap-1">
+    <div className="flex bg-amber-100/50 p-1.5 rounded-lg items-center gap-1">
       {[1, 2, 3, 4, 5].map((star) => (
         <svg
           key={star}
@@ -97,16 +179,23 @@ function AmenityIcon({ type }: { type: string }) {
   );
 }
 
+function ClinicCard({ clinic }: { clinic: Clinic }) {
+  const navigate = useNavigate();
 
-function ClinicCard({ clinic }: { clinic: typeof clinics[0] }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col w-full">
+    <div
+      onClick={() => navigate(`/clinic-details/${clinic.id}`)}
+      className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col w-full hover:shadow-md hover:border-sky-200 transition-all cursor-pointer group"
+    >
       {/* Image */}
-      <div className="w-full h-82.5 overflow-hidden rounded-xl m-3" style={{ width: "calc(100% - 24px)" }}>
+      <div
+        className="w-full h-82.5 overflow-hidden rounded-xl m-3 block"
+        style={{ width: "calc(100% - 24px)" }}
+      >
         <img
           src={clinic.image}
           alt={clinic.name}
-          className="w-full h-full object-cover rounded-xl"
+          className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
         />
       </div>
 
@@ -114,7 +203,9 @@ function ClinicCard({ clinic }: { clinic: typeof clinics[0] }) {
       <div className="px-5 pb-5 flex flex-col gap-3 flex-1">
         {/* Name + Rating */}
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-primary">{clinic.name}</h3>
+          <h3 className="text-lg font-bold text-primary group-hover:text-sky-500 transition-colors">
+            {clinic.name}
+          </h3>
           <StarRating rating={clinic.rating} />
         </div>
 
@@ -128,11 +219,11 @@ function ClinicCard({ clinic }: { clinic: typeof clinics[0] }) {
 
         {/* Badges */}
         <div className="flex items-center gap-3">
-          {clinic.badges.map((badge) => (
-            <div key={badge} className="flex items-center gap-1">
-            <div className="text-green-200">
-            <CheckIcon />
-            </div>
+          {clinic.badges.map((badge, idx) => (
+            <div key={`${badge}-${idx}`} className="flex items-center gap-1">
+              <div className="text-green-200">
+                <CheckIcon />
+              </div>
               <span className="text-sm text-cyan-500 font-medium">{badge}</span>
             </div>
           ))}
@@ -140,8 +231,8 @@ function ClinicCard({ clinic }: { clinic: typeof clinics[0] }) {
 
         {/* Amenities */}
         <div className="flex items-center gap-4">
-          {clinic.amenities.map((amenity) => (
-            <div key={amenity} className="flex items-center gap-1">
+          {clinic.amenities.map((amenity, idx) => (
+            <div key={`${amenity}-${idx}`} className="flex items-center gap-1">
               <AmenityIcon type={amenity} />
               <span className="text-xs text-gray-500">{amenity}</span>
             </div>
@@ -155,19 +246,21 @@ function ClinicCard({ clinic }: { clinic: typeof clinics[0] }) {
         <div className="flex items-end justify-between">
           <div>
             <p className="text-xs text-gray-400 mb-1">Per treatment</p>
-            {clinic.treatments.map((t) => (
-              <p key={t.name} className="text-sm font-normal text-gray-500">
+            {clinic.treatments.map((t, idx) => (
+              <p key={`${t.name}-${idx}`} className="text-sm font-normal text-gray-500">
                 {t.name}{" "}
                 <span className="font-normal text-gray-500">{t.price}</span>
               </p>
             ))}
           </div>
-          <button
-            className="px-6 py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90 active:scale-95"
+          <Link
+            to={`/clinic-details/${clinic.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="px-6 py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90 active:scale-95 inline-flex items-center justify-center text-center cursor-pointer"
             style={{ background: "linear-gradient(135deg, #38bdf8, #0ea5e9)" }}
           >
             Details
-          </button>
+          </Link>
         </div>
       </div>
     </div>
@@ -175,9 +268,20 @@ function ClinicCard({ clinic }: { clinic: typeof clinics[0] }) {
 }
 
 export default function FeaturedClinics() {
+  const { data } = useQuery({
+    queryKey: ["clinics"],
+    queryFn: () => getClinics(),
+  });
+
+  const clinicsList = useMemo(() => {
+    if (data?.clinics && data.clinics.length > 0) {
+      return data.clinics.slice(0, 3).map(mapClinic);
+    }
+    return defaultClinics;
+  }, [data?.clinics]);
+
   return (
     <section className="w-full bg-white py-10 sm:py-14 lg:py-16 px-4 sm:px-6">
-      
       {/* Header */}
       <div className="text-center mb-10 sm:mb-12">
         <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 text-primary">
@@ -190,7 +294,7 @@ export default function FeaturedClinics() {
 
       {/* Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 max-w-6xl mx-auto">
-        {clinics.map((clinic) => (
+        {clinicsList.map((clinic) => (
           <ClinicCard key={clinic.id} clinic={clinic} />
         ))}
       </div>

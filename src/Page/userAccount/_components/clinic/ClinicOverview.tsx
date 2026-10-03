@@ -32,23 +32,25 @@ export default function ClinicOverview({
 
   const totalBeds = submittedClinicInfo?.bedCount || "12";
 
-  const pendingCount = appointments.filter(
-    (a) => !a.status || a.status.toLowerCase() === "pending"
+  const aptList = Array.isArray(appointments) ? appointments : [];
+
+  const pendingCount = aptList.filter(
+    (a) => !a?.status || (typeof a.status === "string" && a.status.toLowerCase() === "pending")
   ).length;
 
-  const confirmedCount = appointments.filter(
-    (a) => a.status?.toLowerCase() === "confirmed"
+  const confirmedCount = aptList.filter(
+    (a) => typeof a?.status === "string" && a.status.toLowerCase() === "confirmed"
   ).length;
 
-  const totalSessions = appointments.reduce(
-    (acc, cur) => acc + (cur.schedules?.length || 1),
+  const totalSessions = aptList.reduce(
+    (acc, cur) => acc + (Array.isArray(cur?.schedules) ? cur.schedules.length : 1),
     0
   );
 
   const stats = [
     {
       title: "Total Bookings",
-      value: appointments.length || 0,
+      value: aptList.length || 0,
       subtitle: `${totalSessions} treatment sessions requested`,
       icon: <CalendarCheck className="text-sky-600" size={22} />,
       bg: "bg-sky-50 border-sky-100",

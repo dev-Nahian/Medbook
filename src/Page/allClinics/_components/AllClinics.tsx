@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getClinics, searchClinics, type ClinicListItem } from "../../../lib/clinicApi";
 
@@ -150,19 +150,24 @@ function AmenityIcon({ type }: { type: string }) {
 }
 
 function ClinicCard({ clinic }: { clinic: Clinic }) {
+  const navigate = useNavigate();
+
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col w-full">
+    <div
+      onClick={() => navigate(`/clinic-details/${clinic.id}`)}
+      className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col w-full hover:shadow-md hover:border-sky-200 transition-all cursor-pointer group"
+    >
       <div className="w-full overflow-hidden rounded-xl m-3" style={{ width: "calc(100% - 24px)", height: "300px" }}>
         <img
           src={clinic.image}
           alt={clinic.name}
-          className="w-full h-full object-cover rounded-xl"
+          className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
         />
       </div>
 
       <div className="px-5 pb-5 flex flex-col gap-3 flex-1">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold" style={{ color: "#0ea5e9" }}>{clinic.name}</h3>
+          <h3 className="text-lg font-bold group-hover:text-sky-500 transition-colors" style={{ color: "#0ea5e9" }}>{clinic.name}</h3>
           <StarRating rating={clinic.rating} />
         </div>
 
@@ -204,8 +209,9 @@ function ClinicCard({ clinic }: { clinic: Clinic }) {
             ))}
           </div>
           <Link
-          to={`/clinic-details/${clinic.id}`}
-            className="px-6 py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90 active:scale-95"
+            to={`/clinic-details/${clinic.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="px-6 py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90 active:scale-95 inline-flex items-center justify-center text-center cursor-pointer"
             style={{ background: "linear-gradient(135deg, #38bdf8, #0ea5e9)" }}
           >
             Details

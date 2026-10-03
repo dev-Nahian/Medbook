@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getBlogs, type BlogListItem } from "../../../lib/blogApi";
 
@@ -97,7 +97,7 @@ const SocialIcons = ({ links = [] }: { links?: BlogPostCard["socialLinks"] }) =>
 
   if (displayLinks.length > 0) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         {displayLinks.map((link, i) => (
           <a
             key={`${link.link}-${i}`}
@@ -117,17 +117,17 @@ const SocialIcons = ({ links = [] }: { links?: BlogPostCard["socialLinks"] }) =>
   }
 
   return (
-  <div className="flex items-center gap-2">
-    {[FacebookIcon, LinkedInIcon, InstagramIcon, LinkIcon].map((Icon, i) => (
-      <div
-        key={i}
-        className="w-7 h-7 rounded-full flex items-center justify-center cursor-pointer hover:border-[#4fc3f7] transition-colors duration-200"
-        style={{ border: "1.5px solid #d0dde8" }}
-      >
-        <Icon />
-      </div>
-    ))}
-  </div>
+    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+      {[FacebookIcon, LinkedInIcon, InstagramIcon, LinkIcon].map((Icon, i) => (
+        <div
+          key={i}
+          className="w-7 h-7 rounded-full flex items-center justify-center cursor-pointer hover:border-[#4fc3f7] transition-colors duration-200"
+          style={{ border: "1.5px solid #d0dde8" }}
+        >
+          <Icon />
+        </div>
+      ))}
+    </div>
   );
 };
 
@@ -154,6 +154,7 @@ const cardVariants = {
 };
 
 export default function BlogPosts() {
+  const navigate = useNavigate();
   const { data } = useQuery({
     queryKey: ["blogs"],
     queryFn: getBlogs,
@@ -179,7 +180,8 @@ export default function BlogPosts() {
             variants={cardVariants}
             whileHover={{ y: -6, boxShadow: "0 16px 40px rgba(0,0,0,0.10)" }}
             transition={{ duration: 0.3 }}
-            className="bg-white rounded-2xl overflow-hidden cursor-pointer group"
+            onClick={() => navigate(`/blog/${post.id}`)}
+            className="bg-white rounded-2xl overflow-hidden cursor-pointer group hover:border-sky-200 transition-colors"
             style={{
               boxShadow: "0 2px 16px rgba(0,0,0,0.07)",
               border: "1px solid #f0f4f8",
@@ -190,7 +192,7 @@ export default function BlogPosts() {
               <motion.img
                 src={post.image}
                 alt={post.title}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 whileHover={{ scale: 1.04 }}
                 transition={{ duration: 0.5, ease: "easeOut" }}
               />
@@ -208,7 +210,7 @@ export default function BlogPosts() {
 
               {/* Title */}
               <h3
-                className="text-sm font-bold leading-snug mb-5"
+                className="text-sm font-bold leading-snug mb-5 group-hover:text-sky-500 transition-colors"
                 style={{
                   color: "#1a2e3b",
                   lineHeight: 1.55,
@@ -228,7 +230,8 @@ export default function BlogPosts() {
               {/* Learn more */}
               <Link
                 to={`/blog/${post.id}`}
-                className="text-xs font-semibold transition-colors duration-200 text-gray-500 hover:underline hover:text-secondary"
+                onClick={(e) => e.stopPropagation()}
+                className="text-xs font-semibold transition-colors duration-200 text-gray-500 hover:underline hover:text-secondary inline-block cursor-pointer"
               >
                 Learn more
               </Link>

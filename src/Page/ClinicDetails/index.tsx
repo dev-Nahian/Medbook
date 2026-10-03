@@ -1,7 +1,7 @@
 import ClinicDetail from "./_components/ClinicDetails"
 import HeroImage from "./_components/HeroImage"
 import { useQuery } from "@tanstack/react-query"
-import { useParams } from "react-router-dom"
+import { useParams, Link } from "react-router-dom"
 import { getClinicDetails } from "../../lib/clinicApi"
 
 const ClinicDetails = () => {
@@ -22,13 +22,20 @@ const ClinicDetails = () => {
     );
   }
 
-  if (isError) {
+  if (isError && !clinic) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] mt-38 text-center px-4">
         <h2 className="text-xl font-bold text-red-600 mb-2">Failed to load clinic details</h2>
         <p className="text-sm text-gray-500 mb-4">
           {error instanceof Error ? error.message : "Unable to load clinic details."}
         </p>
+        <Link
+          to="/see-all-clinic"
+          className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90"
+          style={{ background: "linear-gradient(135deg, #38bdf8, #0ea5e9)" }}
+        >
+          Browse All Clinics
+        </Link>
       </div>
     );
   }

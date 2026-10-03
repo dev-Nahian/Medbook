@@ -39,14 +39,16 @@ export default function ClinicAppointments({
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredAppointments = appointments.filter((apt) => {
-    const currentStatus = (apt.status || "pending").toLowerCase();
+  const aptList = Array.isArray(appointments) ? appointments : [];
+
+  const filteredAppointments = aptList.filter((apt) => {
+    const currentStatus = typeof apt?.status === "string" ? apt.status.toLowerCase() : "pending";
     const matchesFilter =
       filterStatus === "all" || currentStatus === filterStatus.toLowerCase();
 
-    const name = apt.patient_detail?.full_name?.toLowerCase() || "";
-    const email = apt.patient_detail?.email?.toLowerCase() || "";
-    const id = (apt.appointment_id || apt.id.toString()).toLowerCase();
+    const name = apt?.patient_detail?.full_name?.toLowerCase() || "";
+    const email = apt?.patient_detail?.email?.toLowerCase() || "";
+    const id = (apt?.appointment_id || apt?.id?.toString() || "").toLowerCase();
     const query = searchQuery.toLowerCase();
 
     const matchesSearch =
@@ -71,10 +73,10 @@ export default function ClinicAppointments({
 
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-sky-50 text-sky-700 border border-sky-100">
-              Total: {appointments.length}
+              Total: {aptList.length}
             </span>
             <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-100">
-              Pending: {appointments.filter((a) => (a.status || "pending").toLowerCase() === "pending").length}
+              Pending: {aptList.filter((a) => (typeof a?.status === "string" ? a.status.toLowerCase() : "pending") === "pending").length}
             </span>
           </div>
         </div>
